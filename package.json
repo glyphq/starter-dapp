@@ -6,20 +6,35 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "bun run typecheck && bun run lint",
+    "qa": "node scripts/qa.mjs"
   },
   "dependencies": {
+    "@fontsource/geist": "^5.3.0",
+    "@fontsource/geist-mono": "^5.3.0",
+    "@glyph-oss/connect": "2.0.0",
+    "@qubic.org/crypto": "1.0.0",
+    "@qubic.org/react": "1.0.0",
+    "@qubic.org/rpc": "1.0.0",
+    "@qubic.org/types": "1.0.0",
+    "@solar-icons/react": "^1.1.1",
+    "@walletconnect/sign-client": "^2.23.10",
     "next": "16.2.10",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "playwright": "^1.61.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   },

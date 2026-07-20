@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
 
-## Getting Started
+# Glyph Qubic Starter
 
-First, run the development server:
+A multi-wallet reference application for Qubic.
+
+[Glyph](https://glyphq.org) · [Documentation](https://docs.glyphq.org) · [Qubic](https://qubic.org)
+
+</div>
+
+## Overview
+
+Glyph Qubic Starter demonstrates a maintainable wallet connection layer built with
+`@qubic.org/react`. It includes the official Qubic connectors and adds Glyph
+Wallet through `@glyph-oss/connect`.
+
+The interface provides:
+
+- Glyph Wallet desktop deep-link connection
+- Qubic browser extension connection
+- WalletConnect pairing
+- MetaMask Snap connection
+- Restored wallet sessions
+- Live Qubic tick and epoch state
+- User-approved message signing
+- Responsive light and dark themes
+
+## Connector support
+
+| Connector | Package | Requirement |
+| --- | --- | --- |
+| Glyph Wallet | `@glyph-oss/connect` | Glyph Wallet desktop application |
+| Qubic browser extension | `@qubic.org/react` | Injected Qubic browser provider |
+| WalletConnect | `@qubic.org/react` | WalletConnect project ID |
+| MetaMask Snap | `@qubic.org/react` | MetaMask Flask and the Qubic Snap |
+
+The Glyph adapter supports the shared connection and message-signing contracts.
+Glyph transaction requests should use the transfer and smart-contract helpers
+from `@glyph-oss/connect` directly because its callback does not expose the
+signed transaction bytes required by the shared Qubic connector result type.
+
+## Requirements
+
+- Bun 1.3 or newer
+- Node.js 20 or newer
+- A WalletConnect project ID to enable WalletConnect
+- An HTTPS public origin for Glyph dApp metadata
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun install
+cp .env.example .env.local
+bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```dotenv
+NEXT_PUBLIC_APP_ORIGIN=https://starter.glyphq.org
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=
+```
 
-## Learn More
+`NEXT_PUBLIC_APP_ORIGIN` identifies the application to Glyph Wallet and must use
+HTTPS. The callback page remains available at `/__glyph__/`.
 
-To learn more about Next.js, take a look at the following resources:
+WalletConnect remains visible but disabled until a project ID is configured.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Commands
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Command | Purpose |
+| --- | --- |
+| `bun run dev` | Start the development server |
+| `bun run typecheck` | Check TypeScript |
+| `bun run lint` | Run ESLint |
+| `bun run test` | Run type checking and linting |
+| `bun run build` | Create the static production export |
+| `bun run qa` | Run responsive Playwright and axe checks |
 
-## Deploy on Vercel
+## Project structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```text
+app/
+  %5F%5Fglyph%5F%5F/  Glyph callback route exposed as /__glyph__/
+  globals.css          Glyph interface system
+  layout.tsx           Metadata, fonts, and providers
+  page.tsx             Application entry
+components/
+  Providers.tsx        Qubic and wallet providers
+  StarterApp.tsx       Responsive wallet workspace
+lib/connectors/
+  glyph.ts              Glyph Wallet adapter
+  index.ts              Registered connector set
+scripts/
+  qa.mjs                Browser and accessibility checks
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Static deployment
+
+The production build is exported to `out/`. The host must serve the generated
+HTML files and preserve the `/__glyph__/` callback route.
+
+```bash
+bun run build
+python3 -m http.server 4174 -d out
+```
+
+## Design system
+
+The app uses the same visual foundation as the Glyph public website:
+
+- Geist and Geist Mono from local packages
+- Monochrome OLED surfaces
+- Warm neutral light mode
+- Solar icons
+- Restrained rounded geometry
+- Semantic success, warning, and error states
+- Reduced-motion support
+- WCAG 2.2 AA interaction targets and focus states
+
+See [DESIGN.md](DESIGN.md) and [PRODUCT.md](PRODUCT.md) for implementation
+principles and product constraints.
+
+## Independence
+
+Glyph is an independent community project building software for the Qubic
+network. It is not an official Qubic organization.
