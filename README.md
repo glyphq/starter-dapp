@@ -19,10 +19,11 @@ The interface provides:
 - Glyph Wallet desktop deep-link connection
 - Qubic browser extension connection
 - WalletConnect pairing
-- MetaMask Snap connection
 - Restored wallet sessions
 - Focused connector selection modal
+- Wallet-approved transfer requests
 - User-approved message signing
+- Local signature verification
 - Responsive light and dark themes
 
 ## Connector support
@@ -32,7 +33,6 @@ The interface provides:
 | Glyph Wallet | `@glyph-oss/connect` | Glyph Wallet desktop application |
 | Qubic browser extension | `@qubic.org/react` | Injected Qubic browser provider |
 | WalletConnect | `@qubic.org/react` | WalletConnect project ID |
-| MetaMask Snap | `@qubic.org/react` | MetaMask Flask and the Qubic Snap |
 
 The Glyph adapter supports the shared connection and message-signing contracts.
 Glyph transaction requests should use the transfer and smart-contract helpers

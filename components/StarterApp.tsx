@@ -56,12 +56,6 @@ const connectorDetails: Record<string, ConnectorDetail> = {
     Icon: Smartphone,
     requirement: "Project ID required",
   },
-  "metamask-snap": {
-    label: "MetaMask Snap",
-    description: "Connect through the Qubic Snap in MetaMask Flask.",
-    Icon: ShieldCheck,
-    requirement: "MetaMask Flask required",
-  },
 };
 
 function shortIdentity(identity: string) {

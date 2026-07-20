@@ -6,7 +6,7 @@ The Glyph Qubic Starter dApp is a reference application for connecting Qubic wal
 
 ## Audience
 
-Qubic application developers who need a working, inspectable starting point for wallet connection, account state, network state, and message signing.
+Qubic application developers who need a working, inspectable starting point for wallet connection, account state, transfers, and message signing.
 
 ## Primary jobs
 
@@ -28,7 +28,6 @@ Precise, calm, technical, and transparent. The application should feel like main
 - Glyph Wallet connection uses a desktop deep link and a browser callback route.
 - Glyph transaction helpers remain available directly through `@glyph-oss/connect`; the shared adapter only implements methods that can truthfully satisfy the common result contract.
 - WalletConnect requires an application project ID.
-- MetaMask Snap requires a compatible MetaMask environment.
 
 ## Relationship statement
 

@@ -1,5 +1,4 @@
 import {
-  createMetaMaskSnapConnector,
   createWalletConnectConnector,
   extensionConnector,
   type WalletConnector,
@@ -30,7 +29,7 @@ export const connectors: WalletConnector[] = [
   glyphConnector,
   extensionConnector,
   walletConnectConnector,
-  createMetaMaskSnapConnector(),
 ];
 
 export const hasWalletConnectProjectId = Boolean(walletConnectProjectId);
+;
