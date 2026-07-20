@@ -21,6 +21,17 @@ for (const viewport of [
   await mkdir(`artifacts/screenshots/${viewport.name}`, { recursive: true });
   await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/home.png`, fullPage: true });
   if (overflow || serious.length || errors.length) failures.push({ viewport: viewport.name, overflow, serious, errors });
+
+  await page.getByRole("button", { name: "Connect wallet" }).click();
+  const dialogResults = await new AxeBuilder({ page }).analyze();
+  const dialogSerious = dialogResults.violations.filter((violation) =>
+    ["serious", "critical"].includes(violation.impact ?? ""),
+  );
+  const dialogVisible = await page.getByRole("dialog").isVisible();
+  await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/connectors.png`, fullPage: true });
+  if (!dialogVisible || dialogSerious.length) {
+    failures.push({ viewport: `${viewport.name}-dialog`, dialogVisible, serious: dialogSerious });
+  }
   await context.close();
 }
 

@@ -12,7 +12,6 @@ Qubic application developers who need a working, inspectable starting point for 
 
 - Compare every supported connector in one interface.
 - Connect a wallet and inspect the active identity.
-- Observe current Qubic network tick information.
 - Test a user-approved message signature.
 - Copy a maintainable connector structure into another application.
 

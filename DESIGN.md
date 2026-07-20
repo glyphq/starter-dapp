@@ -35,4 +35,4 @@ Solar icons only. Buttons use one meaningful leading icon. Arrows and generic ex
 
 ## Responsive behavior
 
-Desktop uses a connector rail and workspace. Mobile becomes a single logical column, preserves source order, and keeps all controls at touch-friendly sizes. QR content scales within the viewport.
+Desktop and mobile use one centered wallet workspace. Connector selection appears in a focused modal, preserving the wallet state as the primary interface.

@@ -1,23 +1,29 @@
 "use client";
 
-import { useTickInfo, useWallet } from "@qubic.org/react";
+import { useWallet } from "@qubic.org/react";
 import {
   CheckCircle,
+  CloseCircle,
   Code2,
   Copy,
-  Global,
   Key,
   Logout,
   Monitor,
   Pen,
   PlugCircle,
-  RefreshCircle,
   ShieldCheck,
   Smartphone,
   Wallet,
 } from "@solar-icons/react";
 import { QRCodeSVG } from "qrcode.react";
-import { useMemo, useState, useSyncExternalStore, type ComponentType, type SVGProps } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ComponentType,
+  type SVGProps,
+} from "react";
 import { hasWalletConnectProjectId } from "@/lib/connectors";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -56,17 +62,18 @@ const connectorDetails: Record<string, ConnectorDetail> = {
 };
 
 function shortIdentity(identity: string) {
-  return `${identity.slice(0, 10)}…${identity.slice(-10)}`;
+  return `${identity.slice(0, 12)}…${identity.slice(-12)}`;
 }
 
 function LoadingIcon() {
-  return <span className="spinner spinner-small" aria-hidden="true" />;
+  return <span className="spinner" aria-hidden="true" />;
 }
 
 export function StarterApp() {
   const wallet = useWallet();
-  const tickInfo = useTickInfo(5000, { retry: 1 });
   const mounted = useSyncExternalStore(() => () => undefined, () => true, () => false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const connectButtonRef = useRef<HTMLButtonElement>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [pairingUri, setPairingUri] = useState<string | null>(null);
   const [message, setMessage] = useState("Confirm access to Glyph Qubic Starter");
@@ -80,14 +87,25 @@ export function StarterApp() {
     [wallet.activeConnector],
   );
 
+  function openConnectorModal() {
+    setActionError(null);
+    setPairingUri(null);
+    dialogRef.current?.showModal();
+  }
+
+  function closeConnectorModal() {
+    if (pendingId) return;
+    dialogRef.current?.close();
+    connectButtonRef.current?.focus();
+  }
+
   async function connect(connectorId: string) {
     setPendingId(connectorId);
     setPairingUri(null);
     setActionError(null);
     try {
-      await wallet.connect(connectorId, {
-        onUri: (uri) => setPairingUri(uri),
-      });
+      await wallet.connect(connectorId, { onUri: setPairingUri });
+      dialogRef.current?.close();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Connection failed.");
     } finally {
@@ -101,7 +119,6 @@ export function StarterApp() {
     try {
       await wallet.disconnect();
       setSignature(null);
-      setPairingUri(null);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Could not disconnect.");
     } finally {
@@ -136,182 +153,134 @@ export function StarterApp() {
         <a className="brand" href="https://glyphq.org" aria-label="Glyph home">
           glyph<span>.</span>
         </a>
-        <div className="product-name">
-          <span>Qubic starter</span>
-          <span className="environment">mainnet</span>
-        </div>
+        <span className="product-name">Qubic starter</span>
         <a className="header-link" href="https://docs.glyphq.org">
           <Code2 aria-hidden="true" />
           Docs
         </a>
       </header>
 
-      <main className="workspace">
-        <section className="intro" aria-labelledby="page-title">
-          <div>
-            <p className="eyebrow">Multi-wallet reference implementation</p>
-            <h1 id="page-title">Connect a Qubic wallet.</h1>
-            <p className="intro-copy">
-              A working starter for the official Qubic React connectors, with Glyph Wallet added through Glyph Connect.
-            </p>
-          </div>
-          <div className="network-chip" aria-live="polite">
-            <span className={tickInfo.isSuccess ? "network-dot online" : "network-dot"} />
-            <span>Current tick</span>
-            <strong>{tickInfo.data?.tick?.toLocaleString() ?? "Checking"}</strong>
-          </div>
-        </section>
+      <main className="wallet-stage">
+        <section className="wallet-card" aria-labelledby="wallet-state-title">
+          {wallet.account && activeDetail ? (
+            <>
+              <div className="wallet-mark connected"><activeDetail.Icon aria-hidden="true" /></div>
+              <p className="state-label"><CheckCircle aria-hidden="true" /> Connected with {activeDetail.label}</p>
+              <h1 id="wallet-state-title">Wallet connected</h1>
+              <button className="identity" onClick={copyIdentity} title={wallet.account.identity}>
+                <Key aria-hidden="true" />
+                <span>{shortIdentity(wallet.account.identity)}</span>
+                {copied ? <CheckCircle aria-label="Copied" /> : <Copy aria-label="Copy identity" />}
+              </button>
 
-        <div className="app-grid">
-          <section className="panel connector-panel" aria-labelledby="connectors-title">
-            <div className="panel-heading">
-              <div>
-                <p className="section-label">01 / Connectors</p>
-                <h2 id="connectors-title">Choose a connection path</h2>
-              </div>
-              <span className="count">{wallet.connectors.length.toString().padStart(2, "0")}</span>
-            </div>
-
-            <div className="connector-list">
-              {wallet.connectors.map((connector) => {
-                const detail = connectorDetails[connector.id];
-                const available = mounted && connector.isAvailable();
-                const isWalletConnectDisabled = connector.id === "walletconnect" && !hasWalletConnectProjectId;
-                const disabled = Boolean(pendingId) || !available || isWalletConnectDisabled;
-                const selected = wallet.activeConnector?.id === connector.id;
-                const Icon = detail.Icon;
-                return (
-                  <article className={`connector-row${selected ? " selected" : ""}`} key={connector.id}>
-                    <div className="connector-icon"><Icon aria-hidden="true" /></div>
-                    <div className="connector-copy">
-                      <div className="connector-title-line">
-                        <h3>{detail.label}</h3>
-                        {selected && <span className="status success">Connected</span>}
-                      </div>
-                      <p>{detail.description}</p>
-                      {!selected && (
-                        <span className={`availability${available && !isWalletConnectDisabled ? " ready" : ""}`}>
-                          {isWalletConnectDisabled
-                            ? "Configuration required"
-                            : available
-                              ? "Ready"
-                              : detail.requirement ?? "Unavailable"}
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      className="button button-secondary connector-action"
-                      disabled={disabled || selected}
-                      onClick={() => connect(connector.id)}
-                    >
-                      {pendingId === connector.id ? <LoadingIcon /> : <PlugCircle aria-hidden="true" />}
-                      {selected ? "Connected" : "Connect"}
-                    </button>
-                    {connector.id === "walletconnect" && pairingUri && (
-                      <div className="pairing" role="status">
-                        <div className="qr-frame"><QRCodeSVG value={pairingUri} size={176} /></div>
-                        <div>
-                          <strong>Scan with your wallet</strong>
-                          <p>Keep this page open while the wallet approves the session.</p>
-                        </div>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-
-          <aside className="right-column">
-            <section className="panel account-panel" aria-labelledby="account-title">
-              <div className="panel-heading compact">
-                <div>
-                  <p className="section-label">02 / Session</p>
-                  <h2 id="account-title">Wallet state</h2>
-                </div>
-                <Key aria-hidden="true" className="heading-icon" />
+              <div className="signing-area">
+                <label htmlFor="message">Message to sign</label>
+                <textarea id="message" value={message} onChange={(event) => setMessage(event.target.value)} rows={2} />
+                <button className="button" onClick={signMessage} disabled={isSigning || !message.trim()}>
+                  {isSigning ? <LoadingIcon /> : <Pen aria-hidden="true" />}
+                  {isSigning ? "Waiting for approval" : "Request signature"}
+                </button>
               </div>
 
-              {wallet.account && activeDetail ? (
-                <div className="connected-state">
-                  <div className="account-badge"><activeDetail.Icon aria-hidden="true" /></div>
-                  <p className="connected-label"><CheckCircle aria-hidden="true" /> Connected with {activeDetail.label}</p>
-                  <strong className="identity" title={wallet.account.identity}>{shortIdentity(wallet.account.identity)}</strong>
-                  <div className="session-actions">
-                    <button className="button" onClick={copyIdentity}>
-                      {copied ? <CheckCircle aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                      {copied ? "Copied" : "Copy identity"}
-                    </button>
-                    <button className="button button-secondary" onClick={disconnect} disabled={Boolean(pendingId)}>
-                      {pendingId ? <LoadingIcon /> : <Logout aria-hidden="true" />}
-                      Disconnect
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="empty-state">
-                  <div className="empty-mark"><Wallet aria-hidden="true" /></div>
-                  <h3>No wallet connected</h3>
-                  <p>Select a connector to expose the active identity and signing controls.</p>
+              {signature && (
+                <div className="signature-result" role="status">
+                  <CheckCircle aria-hidden="true" />
+                  <div><strong>Signature received</strong><code>{signature}</code></div>
                 </div>
               )}
-            </section>
 
-            <section className="panel network-panel" aria-labelledby="network-title">
-              <div className="panel-heading compact">
-                <div>
-                  <p className="section-label">03 / Network</p>
-                  <h2 id="network-title">Live Qubic state</h2>
-                </div>
-                <Global aria-hidden="true" className="heading-icon" />
-              </div>
-              <dl className="metrics">
-                <div><dt>Status</dt><dd>{tickInfo.isSuccess ? "Connected" : tickInfo.isError ? "Unavailable" : "Checking"}</dd></div>
-                <div><dt>Tick</dt><dd>{tickInfo.data?.tick?.toLocaleString() ?? "•••••••"}</dd></div>
-                <div><dt>Epoch</dt><dd>{tickInfo.data?.epoch?.toLocaleString() ?? "•••"}</dd></div>
-              </dl>
-              <button className="quiet-button" onClick={() => tickInfo.refetch()} disabled={tickInfo.isFetching}>
-                {tickInfo.isFetching ? <LoadingIcon /> : <RefreshCircle aria-hidden="true" />}
-                Refresh network state
+              <button className="quiet-button" onClick={disconnect} disabled={Boolean(pendingId)}>
+                {pendingId ? <LoadingIcon /> : <Logout aria-hidden="true" />}
+                Disconnect wallet
               </button>
-            </section>
-          </aside>
-        </div>
+            </>
+          ) : (
+            <>
+              <div className="wallet-mark"><Wallet aria-hidden="true" /></div>
+              <p className="state-label">Qubic wallet connection</p>
+              <h1 id="wallet-state-title">No wallet connected</h1>
+              <p className="state-copy">Choose a connector to continue with this application.</p>
+              <button ref={connectButtonRef} className="button connect-button" onClick={openConnectorModal}>
+                <PlugCircle aria-hidden="true" />
+                Connect wallet
+              </button>
+            </>
+          )}
 
-        <section className="panel signing-panel" aria-labelledby="sign-title">
-          <div className="signing-copy">
-            <p className="section-label">04 / Approval</p>
-            <h2 id="sign-title">Test message signing</h2>
-            <p>Request a signature from the active wallet. The wallet remains the user approval boundary.</p>
-          </div>
-          <div className="signing-form">
-            <label htmlFor="message">Message</label>
-            <textarea id="message" value={message} onChange={(event) => setMessage(event.target.value)} rows={3} />
-            <button className="button" onClick={signMessage} disabled={!wallet.isConnected || isSigning || !message.trim()}>
-              {isSigning ? <LoadingIcon /> : <Pen aria-hidden="true" />}
-              {isSigning ? "Waiting for approval" : "Request signature"}
-            </button>
-            {signature && (
-              <div className="signature-result" role="status">
-                <CheckCircle aria-hidden="true" />
-                <div><strong>Signature received</strong><code>{signature}</code></div>
-              </div>
-            )}
-          </div>
+          {(actionError || wallet.error) && (
+            <div className="error-message" role="alert">
+              <ShieldCheck aria-hidden="true" />
+              <p>{actionError ?? wallet.error?.message}</p>
+            </div>
+          )}
         </section>
-
-        {(actionError || wallet.error) && (
-          <div className="error-banner" role="alert">
-            <ShieldCheck aria-hidden="true" />
-            <div><strong>The request did not complete</strong><p>{actionError ?? wallet.error?.message}</p></div>
-          </div>
-        )}
       </main>
 
-      <footer className="footer">
-        <p>Independent software built for Qubic. Glyph is not an official Qubic organization.</p>
-        <a href="https://github.com/glyphq">GitHub</a>
-      </footer>
+      <p className="disclosure">Independent software built for Qubic.</p>
+
+      <dialog
+        ref={dialogRef}
+        className="connector-dialog"
+        aria-labelledby="connector-dialog-title"
+        onCancel={(event) => {
+          if (pendingId) event.preventDefault();
+        }}
+        onClose={() => connectButtonRef.current?.focus()}
+        onClick={(event) => {
+          if (event.target === dialogRef.current) closeConnectorModal();
+        }}
+      >
+        <div className="dialog-surface">
+          <div className="dialog-heading">
+            <div>
+              <p className="dialog-eyebrow">Connect wallet</p>
+              <h2 id="connector-dialog-title">Choose a connector</h2>
+            </div>
+            <button className="icon-button" onClick={closeConnectorModal} disabled={Boolean(pendingId)} aria-label="Close connector selection">
+              <CloseCircle aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="connector-list">
+            {wallet.connectors.map((connector) => {
+              const detail = connectorDetails[connector.id];
+              const available = mounted && connector.isAvailable();
+              const needsProjectId = connector.id === "walletconnect" && !hasWalletConnectProjectId;
+              const disabled = Boolean(pendingId) || !available || needsProjectId;
+              const Icon = detail.Icon;
+              return (
+                <button
+                  className="connector-option"
+                  disabled={disabled}
+                  key={connector.id}
+                  onClick={() => connect(connector.id)}
+                >
+                  <span className="connector-icon"><Icon aria-hidden="true" /></span>
+                  <span className="connector-copy">
+                    <strong>{detail.label}</strong>
+                    <span>{detail.description}</span>
+                    <small className={available && !needsProjectId ? "ready" : ""}>
+                      {needsProjectId ? "Configuration required" : available ? "Ready" : detail.requirement ?? "Unavailable"}
+                    </small>
+                  </span>
+                  <span className="option-state">
+                    {pendingId === connector.id ? <LoadingIcon /> : <PlugCircle aria-hidden="true" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {pairingUri && (
+            <div className="pairing" role="status">
+              <div className="qr-frame"><QRCodeSVG value={pairingUri} size={164} /></div>
+              <div><strong>Scan with your wallet</strong><p>Keep this window open while the session is approved.</p></div>
+            </div>
+          )}
+
+          {actionError && <p className="dialog-error" role="alert">{actionError}</p>}
+        </div>
+      </dialog>
     </div>
   );
 }

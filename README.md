@@ -21,7 +21,7 @@ The interface provides:
 - WalletConnect pairing
 - MetaMask Snap connection
 - Restored wallet sessions
-- Live Qubic tick and epoch state
+- Focused connector selection modal
 - User-approved message signing
 - Responsive light and dark themes
 
