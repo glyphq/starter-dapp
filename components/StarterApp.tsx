@@ -1,6 +1,7 @@
 "use client";
 
 import { useWallet } from "@qubic.org/react";
+import { identityToPublicKey, isValidIdentityChecksum, k12, verify } from "@qubic.org/crypto";
 import {
   CheckCircle,
   CloseCircle,
@@ -11,6 +12,7 @@ import {
   Monitor,
   Pen,
   PlugCircle,
+  SendSquare,
   ShieldCheck,
   Smartphone,
   Wallet,
@@ -25,6 +27,7 @@ import {
   type SVGProps,
 } from "react";
 import { hasWalletConnectProjectId } from "@/lib/connectors";
+import { requestGlyphTransfer } from "@/lib/connectors/glyph";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -69,6 +72,14 @@ function LoadingIcon() {
   return <span className="spinner" aria-hidden="true" />;
 }
 
+function hexToBytes(value: string) {
+  const normalized = value.trim();
+  if (!/^[0-9a-fA-F]+$/.test(normalized) || normalized.length % 2 !== 0) {
+    throw new Error("Enter a complete hexadecimal signature.");
+  }
+  return Uint8Array.from(normalized.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+}
+
 export function StarterApp() {
   const wallet = useWallet();
   const mounted = useSyncExternalStore(() => () => undefined, () => true, () => false);
@@ -81,6 +92,13 @@ export function StarterApp() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
+  const [activeAction, setActiveAction] = useState<"transfer" | "sign" | "verify">("transfer");
+  const [destination, setDestination] = useState("");
+  const [amount, setAmount] = useState("1");
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [transferResult, setTransferResult] = useState<string | null>(null);
+  const [verifySignature, setVerifySignature] = useState("");
+  const [verificationResult, setVerificationResult] = useState<boolean | null>(null);
 
   const activeDetail = useMemo(
     () => (wallet.activeConnector ? connectorDetails[wallet.activeConnector.id] : null),
@@ -140,6 +158,42 @@ export function StarterApp() {
     }
   }
 
+  async function sendTransfer() {
+    if (!wallet.activeConnector) return;
+    setIsTransferring(true);
+    setTransferResult(null);
+    setActionError(null);
+    try {
+      if (!isValidIdentityChecksum(destination.trim())) {
+        throw new Error("Enter a valid Qubic destination identity.");
+      }
+      if (!/^\d+$/.test(amount.trim()) || BigInt(amount.trim()) <= BigInt(0)) {
+        throw new Error("Enter a positive whole-number amount.");
+      }
+      const result = wallet.activeConnector.id === "glyph-wallet"
+        ? await requestGlyphTransfer(destination.trim(), amount.trim())
+        : await wallet.sendTransaction({ destination: destination.trim(), amount: amount.trim() });
+      setTransferResult(result.txId);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Transfer request failed.");
+    } finally {
+      setIsTransferring(false);
+    }
+  }
+
+  function verifyMessageSignature() {
+    if (!wallet.account) return;
+    setActionError(null);
+    try {
+      const digest = k12(new TextEncoder().encode(message), 32);
+      const publicKey = identityToPublicKey(wallet.account.identity);
+      setVerificationResult(verify(digest, hexToBytes(verifySignature), publicKey));
+    } catch (error) {
+      setVerificationResult(null);
+      setActionError(error instanceof Error ? error.message : "Signature verification failed.");
+    }
+  }
+
   async function copyIdentity() {
     if (!wallet.account) return;
     await navigator.clipboard.writeText(wallet.account.identity);
@@ -173,21 +227,51 @@ export function StarterApp() {
                 {copied ? <CheckCircle aria-label="Copied" /> : <Copy aria-label="Copy identity" />}
               </button>
 
-              <div className="signing-area">
-                <label htmlFor="message">Message to sign</label>
-                <textarea id="message" value={message} onChange={(event) => setMessage(event.target.value)} rows={2} />
-                <button className="button" onClick={signMessage} disabled={isSigning || !message.trim()}>
-                  {isSigning ? <LoadingIcon /> : <Pen aria-hidden="true" />}
-                  {isSigning ? "Waiting for approval" : "Request signature"}
-                </button>
+              <div className="wallet-actions" aria-label="Wallet actions">
+                <button className={activeAction === "transfer" ? "active" : ""} onClick={() => setActiveAction("transfer")}><SendSquare aria-hidden="true" />Transfer</button>
+                <button className={activeAction === "sign" ? "active" : ""} onClick={() => setActiveAction("sign")}><Pen aria-hidden="true" />Sign</button>
+                <button className={activeAction === "verify" ? "active" : ""} onClick={() => setActiveAction("verify")}><ShieldCheck aria-hidden="true" />Verify</button>
               </div>
 
-              {signature && (
-                <div className="signature-result" role="status">
-                  <CheckCircle aria-hidden="true" />
-                  <div><strong>Signature received</strong><code>{signature}</code></div>
-                </div>
-              )}
+              <div className="action-area">
+                {activeAction === "transfer" && (
+                  <>
+                    <p className="action-note">This requests a real wallet-approved transfer on Qubic mainnet.</p>
+                    <label htmlFor="destination">Destination identity</label>
+                    <input id="destination" value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="60-character Qubic identity" />
+                    <label htmlFor="amount">Amount</label>
+                    <input id="amount" inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} />
+                    <button className="button" onClick={sendTransfer} disabled={isTransferring || !destination.trim() || !amount.trim()}>
+                      {isTransferring ? <LoadingIcon /> : <SendSquare aria-hidden="true" />}
+                      {isTransferring ? "Waiting for approval" : "Test transfer"}
+                    </button>
+                    {transferResult && <p className="compact-result" role="status"><CheckCircle aria-hidden="true" />Transfer submitted: <code>{transferResult}</code></p>}
+                  </>
+                )}
+
+                {activeAction === "sign" && (
+                  <>
+                    <label htmlFor="message">Message</label>
+                    <textarea id="message" value={message} onChange={(event) => setMessage(event.target.value)} rows={2} />
+                    <button className="button" onClick={signMessage} disabled={isSigning || !message.trim()}>
+                      {isSigning ? <LoadingIcon /> : <Pen aria-hidden="true" />}
+                      {isSigning ? "Waiting for approval" : "Sign message"}
+                    </button>
+                    {signature && <p className="compact-result" role="status"><CheckCircle aria-hidden="true" />Signature: <code>{signature}</code></p>}
+                  </>
+                )}
+
+                {activeAction === "verify" && (
+                  <>
+                    <label htmlFor="verify-message">Message</label>
+                    <textarea id="verify-message" value={message} onChange={(event) => setMessage(event.target.value)} rows={2} />
+                    <label htmlFor="signature">Signature</label>
+                    <textarea id="signature" value={verifySignature} onChange={(event) => setVerifySignature(event.target.value)} rows={2} placeholder="Hexadecimal signature" />
+                    <button className="button" onClick={verifyMessageSignature} disabled={!message.trim() || !verifySignature.trim()}><ShieldCheck aria-hidden="true" />Verify signature</button>
+                    {verificationResult !== null && <p className={`compact-result ${verificationResult ? "valid" : "invalid"}`} role="status"><ShieldCheck aria-hidden="true" />{verificationResult ? "Signature is valid" : "Signature is not valid"}</p>}
+                  </>
+                )}
+              </div>
 
               <button className="quiet-button" onClick={disconnect} disabled={Boolean(pendingId)}>
                 {pendingId ? <LoadingIcon /> : <Logout aria-hidden="true" />}

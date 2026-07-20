@@ -12,7 +12,9 @@ Qubic application developers who need a working, inspectable starting point for 
 
 - Compare every supported connector in one interface.
 - Connect a wallet and inspect the active identity.
+- Test a wallet-approved transfer.
 - Test a user-approved message signature.
+- Verify a message signature locally.
 - Copy a maintainable connector structure into another application.
 
 ## Product character

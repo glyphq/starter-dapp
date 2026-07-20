@@ -32,6 +32,25 @@ for (const viewport of [
   if (!dialogVisible || dialogSerious.length) {
     failures.push({ viewport: `${viewport.name}-dialog`, dialogVisible, serious: dialogSerious });
   }
+
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => {
+    localStorage.setItem("glyph-starter-connector", "glyph-wallet");
+    localStorage.setItem(
+      "glyph-starter-account",
+      JSON.stringify({ identity: "A".repeat(60), name: "Glyph Wallet" }),
+    );
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Wallet connected" }).waitFor();
+  const connectedResults = await new AxeBuilder({ page }).analyze();
+  const connectedSerious = connectedResults.violations.filter((violation) =>
+    ["serious", "critical"].includes(violation.impact ?? ""),
+  );
+  await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/connected.png`, fullPage: true });
+  if (connectedSerious.length) {
+    failures.push({ viewport: `${viewport.name}-connected`, serious: connectedSerious });
+  }
   await context.close();
 }
 

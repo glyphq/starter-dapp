@@ -66,6 +66,12 @@ NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=
 `NEXT_PUBLIC_APP_ORIGIN` identifies the application to Glyph Wallet and must use
 HTTPS. The callback page remains available at `/__glyph__/`.
 
+Glyph Wallet returns desktop requests through a browser callback tab. Glyph
+Connect broadcasts the result to the original page and immediately requests
+that the callback tab close. The application cannot prevent the operating
+system from opening that callback because the desktop wallet controls the
+return navigation.
+
 WalletConnect remains visible but disabled until a project ID is configured.
 
 ## Commands

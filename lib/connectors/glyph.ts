@@ -2,6 +2,7 @@ import { k12 } from "@qubic.org/crypto";
 import {
   createConnectRequest,
   createSignMessageRequest,
+  createTransferRequest,
   glyphRequest,
   type GlyphPermission,
 } from "@glyph-oss/connect";
@@ -14,7 +15,7 @@ import type {
 import type { Identity } from "@qubic.org/types";
 
 const STORAGE_KEY = "glyph-starter-account";
-const permissions: GlyphPermission[] = ["sign_message"];
+const permissions: GlyphPermission[] = ["transfer", "sign_message"];
 const listeners = new Map<WalletConnectorEvent, Set<(...args: unknown[]) => void>>();
 
 function appOrigin() {
@@ -55,6 +56,25 @@ function unsupported(): never {
 
 function toHex(bytes: Uint8Array) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function requestGlyphTransfer(destination: string, amount: string) {
+  const account = readAccount();
+  if (!account) throw new Error("Connect Glyph Wallet before requesting a transfer.");
+  const result = await glyphRequest(
+    createTransferRequest({
+      type: "transfer",
+      dapp: dapp(),
+      to: destination,
+      amount,
+      from: account.identity,
+    }),
+  );
+  if (result.status === "rejected") throw new Error("Transfer request was rejected.");
+  if (result.status !== "signed" || result.type !== "transfer") {
+    throw new Error("Glyph Wallet returned an unexpected response.");
+  }
+  return { txId: result.tx_hash, targetTick: result.target_tick };
 }
 
 export const glyphConnector: WalletConnector = {
