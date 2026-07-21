@@ -4,10 +4,15 @@ import {
   createSignMessageRequest,
   createTransferRequest,
   createVerifyMessageRequest,
-  glyphRequest,
+  createEnvelope,
+  createNonce,
+  launchGlyphRequest,
+  subscribeViaRelay,
+  relayCallbackUrl,
   type GlyphPermission,
   type GlyphRequest,
   type GlyphCallbackResponse,
+  type GlyphRequestStatus,
 } from "@glyph-oss/connect";
 import type {
   SignMessageResult,
@@ -45,17 +50,40 @@ function emitRequestFeedback(detail: GlyphRequestFeedback) {
   window.dispatchEvent(new CustomEvent<GlyphRequestFeedback>(GLYPH_REQUEST_STATUS_EVENT, { detail }));
 }
 
+function glyphRelayUrl() {
+  return process.env.NEXT_PUBLIC_GLYPH_RELAY_URL ?? "https://relay.glyphq.org";
+}
+
+function mapRelayStatus(status: GlyphRequestStatus): GlyphRequestFeedback {
+  switch (status.state) {
+    case "opening_wallet": return { state: "opening" };
+    case "awaiting_approval": return { state: "waiting" };
+    case "completed": return { state: "completed" };
+    case "failed": return { state: "failed" };
+  }
+}
+
 async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackResponse> {
-  emitRequestFeedback({ state: "opening" });
+  const nonce = createNonce();
+  const relayUrl = glyphRelayUrl();
+  const envelope = createEnvelope(request, {
+    callback: relayCallbackUrl(nonce, relayUrl),
+  });
+
+  const resultPromise = subscribeViaRelay(nonce, {
+    relayUrl,
+    onStatus(status) {
+      emitRequestFeedback(mapRelayStatus(status));
+    },
+  });
+
+  launchGlyphRequest(envelope);
+
   try {
-    const pending = glyphRequest(request);
-    emitRequestFeedback({ state: "waiting" });
-    const result = await pending;
+    const result = await resultPromise;
     window.focus();
-    emitRequestFeedback({ state: "completed" });
     return result;
   } catch (error) {
-    emitRequestFeedback({ state: "failed" });
     throw error;
   }
 }
