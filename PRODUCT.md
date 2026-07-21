@@ -26,7 +26,7 @@ Precise, calm, technical, and transparent. The application should feel like main
 - Never imply that unavailable connectors were detected.
 - Never fabricate transaction support or wallet capabilities.
 - Glyph Wallet connection uses a desktop deep link and a browser callback route.
-- Glyph transaction helpers remain available directly through `@glyph-oss/connect`; the shared adapter only implements methods that can truthfully satisfy the common result contract.
+- Glyph transfer and verification actions use native `@glyph-oss/connect` requests because the common connector contract does not expose Glyph verification and requires transaction bytes absent from Glyph callbacks.
 - WalletConnect requires an application project ID.
 
 ## Relationship statement

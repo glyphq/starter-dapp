@@ -27,7 +27,7 @@ import {
   type SVGProps,
 } from "react";
 import { hasWalletConnectProjectId } from "@/lib/connectors";
-import { requestGlyphTransfer } from "@/lib/connectors/glyph";
+import { requestGlyphTransfer, requestGlyphVerification } from "@/lib/connectors/glyph";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -93,6 +93,7 @@ export function StarterApp() {
   const [transferResult, setTransferResult] = useState<string | null>(null);
   const [verifySignature, setVerifySignature] = useState("");
   const [verificationResult, setVerificationResult] = useState<boolean | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const activeDetail = useMemo(
     () => (wallet.activeConnector ? connectorDetails[wallet.activeConnector.id] : null),
@@ -175,16 +176,23 @@ export function StarterApp() {
     }
   }
 
-  function verifyMessageSignature() {
-    if (!wallet.account) return;
+  async function verifyMessageSignature() {
+    if (!wallet.account || !wallet.activeConnector) return;
+    setIsVerifying(true);
     setActionError(null);
     try {
-      const digest = k12(new TextEncoder().encode(message), 32);
-      const publicKey = identityToPublicKey(wallet.account.identity);
-      setVerificationResult(verify(digest, hexToBytes(verifySignature), publicKey));
+      if (wallet.activeConnector.id === "glyph-wallet") {
+        setVerificationResult(await requestGlyphVerification(message, verifySignature));
+      } else {
+        const digest = k12(new TextEncoder().encode(message), 32);
+        const publicKey = identityToPublicKey(wallet.account.identity);
+        setVerificationResult(verify(digest, hexToBytes(verifySignature), publicKey));
+      }
     } catch (error) {
       setVerificationResult(null);
       setActionError(error instanceof Error ? error.message : "Signature verification failed.");
+    } finally {
+      setIsVerifying(false);
     }
   }
 
@@ -257,11 +265,12 @@ export function StarterApp() {
 
                 {activeAction === "verify" && (
                   <>
+                    <p className="action-note">{wallet.activeConnector?.id === "glyph-wallet" ? "Glyph Wallet will display and verify this signature." : "This signature is verified locally against the connected identity."}</p>
                     <label htmlFor="verify-message">Message</label>
                     <textarea id="verify-message" value={message} onChange={(event) => setMessage(event.target.value)} rows={2} />
                     <label htmlFor="signature">Signature</label>
                     <textarea id="signature" value={verifySignature} onChange={(event) => setVerifySignature(event.target.value)} rows={2} placeholder="Hexadecimal signature" />
-                    <button className="button" onClick={verifyMessageSignature} disabled={!message.trim() || !verifySignature.trim()}><ShieldCheck aria-hidden="true" />Verify signature</button>
+                    <button className="button" onClick={verifyMessageSignature} disabled={isVerifying || !message.trim() || !verifySignature.trim()}>{isVerifying ? <LoadingIcon /> : <ShieldCheck aria-hidden="true" />}{isVerifying ? "Waiting for verification" : "Verify signature"}</button>
                     {verificationResult !== null && <p className={`compact-result ${verificationResult ? "valid" : "invalid"}`} role="status"><ShieldCheck aria-hidden="true" />{verificationResult ? "Signature is valid" : "Signature is not valid"}</p>}
                   </>
                 )}

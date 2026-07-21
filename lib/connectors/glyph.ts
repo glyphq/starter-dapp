@@ -1,8 +1,9 @@
-import { k12 } from "@qubic.org/crypto";
+import { identityToPublicKey, k12 } from "@qubic.org/crypto";
 import {
   createConnectRequest,
   createSignMessageRequest,
   createTransferRequest,
+  createVerifyMessageRequest,
   glyphRequest,
   type GlyphPermission,
 } from "@glyph-oss/connect";
@@ -58,6 +59,23 @@ function toHex(bytes: Uint8Array) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function fromHex(value: string) {
+  const normalized = value.trim();
+  if (!/^[0-9a-fA-F]+$/.test(normalized) || normalized.length % 2 !== 0) {
+    throw new Error("Enter a complete hexadecimal signature.");
+  }
+  return Uint8Array.from(normalized.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function base64ToBytes(value: string) {
+  const binary = atob(value);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
 export async function requestGlyphTransfer(destination: string, amount: string) {
   const account = readAccount();
   if (!account) throw new Error("Connect Glyph Wallet before requesting a transfer.");
@@ -75,6 +93,25 @@ export async function requestGlyphTransfer(destination: string, amount: string) 
     throw new Error("Glyph Wallet returned an unexpected response.");
   }
   return { txId: result.tx_hash, targetTick: result.target_tick };
+}
+
+export async function requestGlyphVerification(message: string, signatureHex: string) {
+  const account = readAccount();
+  if (!account) throw new Error("Connect Glyph Wallet before verifying a signature.");
+  const result = await glyphRequest(
+    createVerifyMessageRequest({
+      type: "verify_message",
+      dapp: dapp(),
+      message,
+      signature: bytesToBase64(fromHex(signatureHex)),
+      public_key: bytesToBase64(identityToPublicKey(account.identity)),
+    }),
+  );
+  if (result.status === "rejected") throw new Error("Verification request was rejected.");
+  if (result.status !== "verified") {
+    throw new Error("Glyph Wallet returned an unexpected response.");
+  }
+  return result.valid;
 }
 
 export const glyphConnector: WalletConnector = {
@@ -123,7 +160,7 @@ export const glyphConnector: WalletConnector = {
       throw new Error("Glyph Wallet returned an unexpected response.");
     }
     return {
-      signatureHex: result.signature,
+      signatureHex: toHex(base64ToBytes(result.signature)),
       digestHex: toHex(k12(new TextEncoder().encode(message), 32)),
     };
   },

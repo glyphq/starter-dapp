@@ -34,10 +34,9 @@ The interface provides:
 | Qubic browser extension | `@qubic.org/react` | Injected Qubic browser provider |
 | WalletConnect | `@qubic.org/react` | WalletConnect project ID |
 
-The Glyph adapter supports the shared connection and message-signing contracts.
-Glyph transaction requests should use the transfer and smart-contract helpers
-from `@glyph-oss/connect` directly because its callback does not expose the
-signed transaction bytes required by the shared Qubic connector result type.
+The Glyph integration uses native Glyph Connect requests for wallet-approved
+transfers, message signing, and signature verification. Signature values are
+normalized to the hexadecimal format used by the shared Qubic connector API.
 
 ## Requirements
 
