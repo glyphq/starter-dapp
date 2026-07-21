@@ -6,6 +6,8 @@ import {
   createVerifyMessageRequest,
   glyphRequest,
   type GlyphPermission,
+  type GlyphRequest,
+  type GlyphCallbackResponse,
 } from "@glyph-oss/connect";
 import type {
   SignMessageResult,
@@ -16,6 +18,13 @@ import type {
 import type { Identity } from "@qubic.org/types";
 
 const STORAGE_KEY = "glyph-starter-account";
+export const GLYPH_REQUEST_STATUS_EVENT = "glyph:request-status";
+
+export type GlyphRequestFeedback =
+  | { state: "opening" }
+  | { state: "waiting" }
+  | { state: "completed" }
+  | { state: "failed" };
 const permissions: GlyphPermission[] = ["transfer", "sign_message"];
 const listeners = new Map<WalletConnectorEvent, Set<(...args: unknown[]) => void>>();
 
@@ -29,6 +38,26 @@ function dapp() {
 
 function emit(event: WalletConnectorEvent, ...args: unknown[]) {
   listeners.get(event)?.forEach((listener) => listener(...args));
+}
+
+function emitRequestFeedback(detail: GlyphRequestFeedback) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<GlyphRequestFeedback>(GLYPH_REQUEST_STATUS_EVENT, { detail }));
+}
+
+async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackResponse> {
+  emitRequestFeedback({ state: "opening" });
+  try {
+    const pending = glyphRequest(request);
+    emitRequestFeedback({ state: "waiting" });
+    const result = await pending;
+    window.focus();
+    emitRequestFeedback({ state: "completed" });
+    return result;
+  } catch (error) {
+    emitRequestFeedback({ state: "failed" });
+    throw error;
+  }
 }
 
 function saveAccount(account: WalletAccount | null) {
@@ -79,7 +108,7 @@ function base64ToBytes(value: string) {
 export async function requestGlyphTransfer(destination: string, amount: string) {
   const account = readAccount();
   if (!account) throw new Error("Connect Glyph Wallet before requesting a transfer.");
-  const result = await glyphRequest(
+  const result = await requestFromGlyph(
     createTransferRequest({
       type: "transfer",
       dapp: dapp(),
@@ -98,7 +127,7 @@ export async function requestGlyphTransfer(destination: string, amount: string) 
 export async function requestGlyphVerification(message: string, signatureHex: string) {
   const account = readAccount();
   if (!account) throw new Error("Connect Glyph Wallet before verifying a signature.");
-  const result = await glyphRequest(
+  const result = await requestFromGlyph(
     createVerifyMessageRequest({
       type: "verify_message",
       dapp: dapp(),
@@ -118,7 +147,7 @@ export const glyphConnector: WalletConnector = {
   id: "glyph-wallet",
   isAvailable: () => typeof window !== "undefined",
   async connect() {
-    const result = await glyphRequest(
+    const result = await requestFromGlyph(
       createConnectRequest({ type: "connect", dapp: dapp(), permissions }),
     );
     if (result.status === "rejected") throw new Error("Connection request was rejected.");
@@ -147,7 +176,7 @@ export const glyphConnector: WalletConnector = {
   async signMessage(message: string): Promise<SignMessageResult> {
     const account = readAccount();
     if (!account) throw new Error("Connect Glyph Wallet before signing a message.");
-    const result = await glyphRequest(
+    const result = await requestFromGlyph(
       createSignMessageRequest({
         type: "sign_message",
         dapp: dapp(),

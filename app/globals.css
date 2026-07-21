@@ -79,6 +79,9 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 .identity { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .65rem; margin-top: 1.4rem; padding: .9rem 1rem; border: 0; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-primary); cursor: pointer; }
 .identity span { overflow: hidden; text-overflow: ellipsis; font-family: "Geist Mono", monospace; font-size: .8rem; white-space: nowrap; }
 .identity svg { width: 1rem; height: 1rem; color: var(--text-tertiary); }
+.request-feedback { width: 100%; margin: 1rem 0 0; padding: .72rem .85rem; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-secondary); font-size: .76rem; line-height: 1.45; text-align: center; }
+.request-feedback-completed { background: color-mix(in srgb, var(--success) 9%, var(--surface-2)); color: var(--success); }
+.request-feedback-failed { background: color-mix(in srgb, var(--danger) 9%, var(--surface-2)); color: var(--danger); }
 .wallet-actions { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; margin-top: 1.5rem; padding: .3rem; border-radius: var(--radius-md); background: var(--surface-2); }
 .wallet-actions button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 42px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-tertiary); font-size: .78rem; cursor: pointer; }
 .wallet-actions button.active { background: var(--surface-1); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border-subtle); }
@@ -128,10 +131,20 @@ textarea { resize: vertical; min-height: 78px; }
 .pairing strong { font-size: .88rem; }
 .pairing p { margin: .4rem 0 0; color: var(--text-secondary); font-size: .76rem; line-height: 1.45; }
 .dialog-error { margin: .5rem; padding: .8rem; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 8%, var(--surface-2)); color: var(--danger); font-size: .78rem; }
+.dialog-progress { margin: .5rem; padding: .8rem; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-secondary); font-size: .78rem; line-height: 1.45; text-align: center; }
 .spinner { width: 1rem; height: 1rem; border: 1.5px solid var(--border-default); border-top-color: currentColor; border-radius: 50%; animation: spin .8s linear infinite; }
-.callback-page { min-height: 100svh; display: grid; place-content: center; justify-items: center; padding: 2rem; text-align: center; }
-.callback-page h1 { margin-top: 1.5rem; font-size: 2rem; }
-.callback-page p { color: var(--text-secondary); }
+.callback-page { position: relative; min-height: 100svh; display: grid; place-content: center; justify-items: center; padding: 5rem 2rem; text-align: center; }
+.callback-brand { position: absolute; top: 1.5rem; left: var(--gutter); font-size: 1.55rem; font-weight: 600; letter-spacing: -.06em; }
+.callback-brand span { color: var(--text-tertiary); }
+.callback-status { width: min(100%, 480px); display: flex; flex-direction: column; align-items: center; }
+.callback-icon { display: grid; place-items: center; width: 68px; height: 68px; border-radius: 17px; background: var(--surface-3); color: var(--text-secondary); }
+.callback-icon svg { width: 1.8rem; height: 1.8rem; }
+.callback-status-processing .callback-icon svg { animation: spin 1.2s linear infinite; }
+.callback-status-completed .callback-icon { color: var(--success); }
+.callback-status-missing .callback-icon, .callback-status-invalid .callback-icon { color: var(--danger); }
+.callback-eyebrow { margin: 1.5rem 0 .7rem; color: var(--text-tertiary); font-family: "Geist Mono", monospace; font-size: .7rem; letter-spacing: .07em; text-transform: uppercase; }
+.callback-page h1 { margin: 0; font-size: clamp(2rem, 7vw, 3rem); font-weight: 500; letter-spacing: -.055em; line-height: 1.04; }
+.callback-status > p:not(.callback-eyebrow) { max-width: 370px; margin: 1rem 0 0; color: var(--text-secondary); font-size: .92rem; line-height: 1.55; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 560px) {

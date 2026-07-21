@@ -20,6 +20,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import {
   useMemo,
+  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -27,7 +28,12 @@ import {
   type SVGProps,
 } from "react";
 import { hasWalletConnectProjectId } from "@/lib/connectors";
-import { requestGlyphTransfer, requestGlyphVerification } from "@/lib/connectors/glyph";
+import {
+  GLYPH_REQUEST_STATUS_EVENT,
+  requestGlyphTransfer,
+  requestGlyphVerification,
+  type GlyphRequestFeedback,
+} from "@/lib/connectors/glyph";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -94,6 +100,25 @@ export function StarterApp() {
   const [verifySignature, setVerifySignature] = useState("");
   const [verificationResult, setVerificationResult] = useState<boolean | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [glyphFeedback, setGlyphFeedback] = useState<GlyphRequestFeedback | null>(null);
+
+  useEffect(() => {
+    let clearTimer: number | undefined;
+    const receiveFeedback = (event: Event) => {
+      const feedback = (event as CustomEvent<GlyphRequestFeedback>).detail;
+      setGlyphFeedback(feedback);
+      if (feedback.state === "completed" || feedback.state === "failed") {
+        window.clearTimeout(clearTimer);
+        clearTimer = window.setTimeout(() => setGlyphFeedback(null), 1800);
+      }
+    };
+
+    window.addEventListener(GLYPH_REQUEST_STATUS_EVENT, receiveFeedback);
+    return () => {
+      window.removeEventListener(GLYPH_REQUEST_STATUS_EVENT, receiveFeedback);
+      window.clearTimeout(clearTimer);
+    };
+  }, []);
 
   const activeDetail = useMemo(
     () => (wallet.activeConnector ? connectorDetails[wallet.activeConnector.id] : null),
@@ -223,6 +248,14 @@ export function StarterApp() {
               <div className="wallet-mark connected"><activeDetail.Icon aria-hidden="true" /></div>
               <p className="state-label"><CheckCircle aria-hidden="true" /> Connected with {activeDetail.label}</p>
               <h1 id="wallet-state-title">Wallet connected</h1>
+              {glyphFeedback && (
+                <p className={`request-feedback request-feedback-${glyphFeedback.state}`} role="status">
+                  {glyphFeedback.state === "opening" && "Opening Glyph Wallet"}
+                  {glyphFeedback.state === "waiting" && "Continue in Glyph Wallet. This page will update after your response."}
+                  {glyphFeedback.state === "completed" && "Wallet response received"}
+                  {glyphFeedback.state === "failed" && "The wallet request did not complete"}
+                </p>
+              )}
               <button className="identity" onClick={copyIdentity} title={wallet.account.identity}>
                 <Key aria-hidden="true" />
                 <span>{shortIdentity(wallet.account.identity)}</span>
@@ -363,6 +396,15 @@ export function StarterApp() {
               <div className="qr-frame"><QRCodeSVG value={pairingUri} size={164} /></div>
               <div><strong>Scan with your wallet</strong><p>Keep this window open while the session is approved.</p></div>
             </div>
+          )}
+
+          {pendingId === "glyph-wallet" && glyphFeedback && (
+            <p className={`dialog-progress request-feedback-${glyphFeedback.state}`} role="status">
+              {glyphFeedback.state === "opening" && "Opening Glyph Wallet"}
+              {glyphFeedback.state === "waiting" && "Approve or reject the connection in Glyph Wallet."}
+              {glyphFeedback.state === "completed" && "Wallet response received"}
+              {glyphFeedback.state === "failed" && "The wallet request did not complete"}
+            </p>
           )}
 
           {actionError && <p className="dialog-error" role="alert">{actionError}</p>}
