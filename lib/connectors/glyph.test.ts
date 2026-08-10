@@ -10,6 +10,7 @@ import {
   createSignMessageRequest,
   createTransferRequest,
   createVerifyMessageRequest,
+  sha256Base64UrlSync,
   sha256CanonicalJson,
   verifyCallbackEnvelope,
   type GlyphCallbackResponse,
@@ -31,6 +32,16 @@ const IDENTITY = "A".repeat(60);
 
 function bytesToBase64(bytes: Uint8Array) {
   return Buffer.from(bytes).toString("base64");
+}
+
+/** Mirror the Wallet relay binding, which redacts the callback write capability. */
+function walletSanitizedRelayCallbackUrl(callbackUrl: string) {
+  const url = new URL(callbackUrl);
+  const [, v2, callback, session, callbackCapability] = url.pathname.split("/");
+  expect([v2, callback]).toEqual(["v2", "callback"]);
+  expect(session).toBeTruthy();
+  expect(callbackCapability).toBeTruthy();
+  return `${url.origin}/v2/callback/${session}/${sha256Base64UrlSync(callbackCapability!)}`;
 }
 
 function defaultResult(): GlyphCallbackResponse {
@@ -66,7 +77,8 @@ async function createSignedEnvelope(
     issued_at: 1_234_567_800,
     result_hash: sha256CanonicalJson(result),
     relay: {
-      callback_url: CALLBACK_URL,
+      // Wallet signs the canonical binding without exposing the callback write capability.
+      callback_url: walletSanitizedRelayCallbackUrl(CALLBACK_URL),
       official_relay: true,
       route: "v2_session_callback",
       v1_nonce: null,
@@ -112,6 +124,8 @@ function assertMainnetV2Request(request: GlyphRequest) {
   expect(envelope.protocol).toBe("glyph-connect-request/2");
   expect(envelope.network).toEqual({ id: "qubic:mainnet" });
   expect(envelope.network).toEqual(GLYPH_MAINNET_NETWORK);
+  // Relay verification canonicalizes this expected value, so requests must retain the raw capability.
+  expect(envelope.callback).toBe(CALLBACK_URL);
   expect(envelope.request_hash).toMatch(/^sha256:[A-Za-z0-9_-]{43}$/);
   expect(envelope.request_hash).toBe(computeRequestHash(envelope));
   expect(url).toStartWith("glyph://v2/request?d=");
@@ -148,10 +162,46 @@ describe("Glyph Connect v4 request initiation", () => {
 });
 
 describe("Glyph Connect v4 signed callback verification", () => {
-  test("accepts a SchnorrQ K12-signed callback bound to the prepared v2 request", async () => {
+  test("accepts Wallet's sanitized official Relay v2 binding against the raw prepared callback URL", async () => {
     const signed = await createSignedEnvelope();
 
+    // verificationFor deliberately supplies CALLBACK_URL, the raw prepared capability.
     await expect(verifyCallbackEnvelope(signed.envelope, verificationFor(signed))).resolves.toEqual(signed.result);
+  });
+
+  test("rejects Wallet-shaped Relay callbacks for a different callback capability or session", async () => {
+    const wrongCapability = await createSignedEnvelope(defaultResult(), {
+      relay: {
+        callback_url: walletSanitizedRelayCallbackUrl(
+          "https://relay.glyphq.org/v2/callback/session-id-123456789012/c_9876543210987654321098",
+        ),
+        official_relay: true,
+        route: "v2_session_callback",
+        v1_nonce: null,
+        session_id: "session-id",
+        callback_capability_fingerprint: "wrong-callback-capability",
+      },
+    });
+    const wrongSession = await createSignedEnvelope(defaultResult(), {
+      relay: {
+        callback_url: walletSanitizedRelayCallbackUrl(
+          "https://relay.glyphq.org/v2/callback/other-session-123456789012/c_1234567890123456789012",
+        ),
+        official_relay: true,
+        route: "v2_session_callback",
+        v1_nonce: null,
+        session_id: "other-session",
+        callback_capability_fingerprint: "callback-cap-fingerprint",
+      },
+    });
+
+    const expectedError = "relay callback_url does not match expected callback URL";
+    await expect(verifyCallbackEnvelope(wrongCapability.envelope, verificationFor(wrongCapability))).rejects.toThrow(
+      expectedError,
+    );
+    await expect(verifyCallbackEnvelope(wrongSession.envelope, verificationFor(wrongSession))).rejects.toThrow(
+      expectedError,
+    );
   });
 
   test("accepts a signed user rejection that is bound to the prepared request", async () => {

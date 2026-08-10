@@ -34,7 +34,7 @@ The interface provides:
 | Qubic browser extension | `@qubic.org/react` | Injected Qubic browser provider |
 | WalletConnect | `@qubic.org/react` | WalletConnect project ID |
 
-The Glyph integration uses `@glyph-oss/connect@4.0.0` native Glyph Connect v2
+The Glyph integration uses `@glyph-oss/connect@4.0.1` native Glyph Connect v2
 requests for wallet-approved transfers, message signing, and signature
 verification. Every launched request explicitly binds to `qubic:mainnet`.
 Signature values are normalized to the hexadecimal format used by the shared
@@ -85,7 +85,7 @@ connector requires `@glyph-oss/connect` verification before accepting a result:
 - Qubic SchnorrQ verification over the K12 digest of the canonical signed payload
 - the request nonce and type
 - the prepared envelope's request hash and mainnet binding
-- the configured dApp origin, request expiry, and prepared relay callback URL
+- the raw prepared relay callback URL. `@glyph-oss/connect` canonicalizes only official Relay v2 write capabilities to Wallet's signed fingerprint binding, while preserving strict session and capability matching
 
 Unsigned, tampered, cross-network, or mismatched callback envelopes are rejected.
 
