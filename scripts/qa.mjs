@@ -42,7 +42,7 @@ for (const viewport of [
     );
   });
   await page.reload({ waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: "Wallet connected" }).waitFor();
+  await page.getByRole("heading", { name: "Connected" }).waitFor();
   const connectedResults = await new AxeBuilder({ page }).analyze();
   const connectedSerious = connectedResults.violations.filter((violation) =>
     ["serious", "critical"].includes(violation.impact ?? ""),
