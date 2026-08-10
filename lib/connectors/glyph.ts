@@ -13,6 +13,7 @@ import {
   type GlyphCallbackResponse,
   type GlyphEnvelope,
   type GlyphNetworkBinding,
+  type GlyphPreparedRelaySession,
   type GlyphRequestStatus,
 } from "@glyph-oss/connect";
 import type {
@@ -35,6 +36,8 @@ export type GlyphRequestFeedback =
   | { state: "failed" };
 const permissions: GlyphPermission[] = ["transfer", "sign_message"];
 const listeners = new Map<WalletConnectorEvent, Set<(...args: unknown[]) => void>>();
+let preparedRelaySession: GlyphPreparedRelaySession | null = null;
+let relaySessionPreparation: Promise<GlyphPreparedRelaySession> | null = null;
 
 function appOrigin() {
   return process.env.NEXT_PUBLIC_APP_ORIGIN ?? "https://starter.glyphq.org";
@@ -62,8 +65,44 @@ function mapRelayStatus(status: GlyphRequestStatus): GlyphRequestFeedback {
   }
 }
 
+/**
+ * Register a single-use Relay v2 session before the user requests a Wallet action.
+ *
+ * `launchGlyphRequest()` opens a custom protocol through a synthetic anchor click,
+ * which must remain in the initiating user interaction. Do not await relay I/O in
+ * the click path. The callback write capability remains registered before it is
+ * included in any Wallet request and the read capability remains dApp-only.
+ */
+export function prewarmGlyphRelaySession(): Promise<GlyphPreparedRelaySession> {
+  if (preparedRelaySession) return Promise.resolve(preparedRelaySession);
+  if (!relaySessionPreparation) {
+    relaySessionPreparation = prepareRelaySession()
+      .then((session) => {
+        preparedRelaySession = session;
+        return session;
+      })
+      .finally(() => {
+        relaySessionPreparation = null;
+      });
+  }
+  return relaySessionPreparation;
+}
+
+export function isGlyphRelaySessionReady() {
+  return preparedRelaySession !== null;
+}
+
+function takePreparedGlyphRelaySession() {
+  if (!preparedRelaySession) {
+    throw new Error("Glyph Wallet is preparing a secure relay session. Wait until it is ready, then try again.");
+  }
+  const session = preparedRelaySession;
+  preparedRelaySession = null;
+  return session;
+}
+
 async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackResponse> {
-  const prepared = await prepareRelaySession();
+  const prepared = takePreparedGlyphRelaySession();
   const envelope = createMainnetGlyphEnvelope(request, prepared.callbackUrl);
   const resultPromise = subscribeViaRelayV2(request, prepared, {
     verification: {
@@ -81,6 +120,9 @@ async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackRes
   });
 
   launchGlyphRequest(envelope);
+  // Keep the next action ready without moving this action's custom-protocol click
+  // behind a network await. The current session was fully registered before launch.
+  void prewarmGlyphRelaySession();
 
   try {
     const result = await resultPromise;

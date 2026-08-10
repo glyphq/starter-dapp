@@ -30,6 +30,8 @@ import {
 import { hasWalletConnectProjectId } from "@/lib/connectors";
 import {
   GLYPH_REQUEST_STATUS_EVENT,
+  isGlyphRelaySessionReady,
+  prewarmGlyphRelaySession,
   requestGlyphTransfer,
   requestGlyphVerification,
   type GlyphRequestFeedback,
@@ -119,6 +121,7 @@ export function StarterApp() {
   const [verificationResult, setVerificationResult] = useState<boolean | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [glyphFeedback, setGlyphFeedback] = useState<GlyphRequestFeedback | null>(null);
+  const [glyphRelayReady, setGlyphRelayReady] = useState(false);
 
   useEffect(() => {
     let clearTimer: number | undefined;
@@ -147,6 +150,13 @@ export function StarterApp() {
     setActionError(null);
     setPairingUri(null);
     dialogRef.current?.showModal();
+    setGlyphRelayReady(isGlyphRelaySessionReady());
+    void prewarmGlyphRelaySession()
+      .then(() => setGlyphRelayReady(true))
+      .catch((error) => {
+        setGlyphRelayReady(false);
+        setActionError(error instanceof Error ? error.message : "Could not prepare a secure Glyph session.");
+      });
   }
 
   function closeConnectorModal() {
@@ -156,7 +166,13 @@ export function StarterApp() {
   }
 
   async function connect(connectorId: string) {
+    if (connectorId === "glyph-wallet" && !isGlyphRelaySessionReady()) {
+      setGlyphRelayReady(false);
+      void prewarmGlyphRelaySession().then(() => setGlyphRelayReady(true)).catch(() => undefined);
+      return;
+    }
     setPendingId(connectorId);
+    if (connectorId === "glyph-wallet") setGlyphRelayReady(false);
     setPairingUri(null);
     setActionError(null);
     try {
@@ -390,7 +406,8 @@ export function StarterApp() {
               const detail = connectorDetail(connector.id);
               const available = mounted && connectorAvailable(connector);
               const needsProjectId = connector.id === "walletconnect" && !hasWalletConnectProjectId;
-              const disabled = Boolean(pendingId) || !available || needsProjectId;
+              const glyphPreparing = connector.id === "glyph-wallet" && !glyphRelayReady;
+              const disabled = Boolean(pendingId) || !available || needsProjectId || glyphPreparing;
               const Icon = detail.Icon;
               return (
                 <button
@@ -405,7 +422,13 @@ export function StarterApp() {
                     <strong>{detail.label}</strong>
                     <span>{detail.description}</span>
                     <small className={available && !needsProjectId ? "ready" : ""}>
-                      {needsProjectId ? "Configuration required" : available ? "Ready" : detail.requirement ?? "Unavailable"}
+                      {needsProjectId
+                        ? "Configuration required"
+                        : glyphPreparing
+                          ? "Preparing secure session"
+                          : available
+                            ? "Ready"
+                            : detail.requirement ?? "Unavailable"}
                     </small>
                   </span>
                   <span className="option-state">
