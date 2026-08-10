@@ -8,13 +8,13 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "bun run typecheck && bun run lint",
+    "test": "bun run typecheck && bun run lint && bun test",
     "qa": "node scripts/qa.mjs"
   },
   "dependencies": {
     "@fontsource/geist": "^5.3.0",
     "@fontsource/geist-mono": "^5.3.0",
-    "@glyph-oss/connect": "3.0.0",
+    "@glyph-oss/connect": "4.0.0",
     "@qubic.org/crypto": "1.0.0",
     "@qubic.org/react": "1.0.0",
     "@qubic.org/rpc": "1.0.0",

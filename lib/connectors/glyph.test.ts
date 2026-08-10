@@ -2,54 +2,71 @@ import { describe, expect, test } from "bun:test";
 import {
   GLYPH_CALLBACK_ENVELOPE_VERSION,
   GLYPH_CALLBACK_SIGNATURE_ALGORITHM,
+  buildGlyphUrl,
   canonicalDappOrigin,
+  canonicalJson,
+  computeRequestHash,
+  createConnectRequest,
+  createSignMessageRequest,
+  createTransferRequest,
+  createVerifyMessageRequest,
+  sha256CanonicalJson,
   verifyCallbackEnvelope,
   type GlyphCallbackResponse,
   type GlyphCallbackSignaturePayload,
+  type GlyphRequest,
   type GlyphSignedCallbackEnvelope,
 } from "@glyph-oss/connect";
 import { generateRandomSeed, k12, publicKeyFromSeed, sign } from "@qubic.org/crypto";
-import { verifyWalletCallbackSignature } from "./glyph";
+import {
+  createMainnetGlyphEnvelope,
+  GLYPH_MAINNET_NETWORK,
+  verifyWalletCallbackSignature,
+} from "./glyph";
 
-function canonicalize(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`).join(",")}}`;
-}
+const DAPP_ORIGIN = "https://starter.glyphq.org";
+const CALLBACK_URL = "https://relay.glyphq.org/v2/callback/session-id-123456789012/c_1234567890123456789012";
+const FUTURE_EXP = Math.floor(Date.now() / 1_000) + 300;
+const IDENTITY = "A".repeat(60);
 
 function bytesToBase64(bytes: Uint8Array) {
   return Buffer.from(bytes).toString("base64");
 }
 
-function bytesToBase64Url(bytes: Uint8Array) {
-  return Buffer.from(bytes).toString("base64url");
-}
-
-async function sha256Base64Url(value: string) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return bytesToBase64Url(new Uint8Array(digest));
-}
-
-async function createSignedEnvelope(overrides: Partial<GlyphCallbackSignaturePayload> = {}) {
-  const seed = generateRandomSeed();
-  const publicKey = publicKeyFromSeed(seed);
-  const result: GlyphCallbackResponse = {
+function defaultResult(): GlyphCallbackResponse {
+  return {
     status: "connected",
     type: "connect",
-    nonce: "nonce-test-123",
-    identity: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    nonce: "nonce-test-123456",
+    identity: IDENTITY,
     permissions: ["transfer", "sign_message"],
   };
+}
+
+async function createSignedEnvelope(
+  result: GlyphCallbackResponse = defaultResult(),
+  overrides: Partial<GlyphCallbackSignaturePayload> = {},
+) {
+  const seed = generateRandomSeed();
+  const publicKey = publicKeyFromSeed(seed);
+  const request = createConnectRequest({
+    type: "connect",
+    dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
+    permissions: ["transfer", "sign_message"],
+  }, { nonce: result.nonce, exp: FUTURE_EXP });
+  const requestEnvelope = createMainnetGlyphEnvelope(request, CALLBACK_URL);
   const payload: GlyphCallbackSignaturePayload = {
     version: GLYPH_CALLBACK_ENVELOPE_VERSION,
+    request_hash: requestEnvelope.request_hash,
+    network: requestEnvelope.network,
     nonce: result.nonce,
-    dapp_origin: canonicalDappOrigin("https://starter.glyphq.org"),
+    dapp_origin: canonicalDappOrigin(DAPP_ORIGIN),
     request_type: result.type,
-    exp: 1234567890,
-    result_hash: await sha256Base64Url(canonicalize(result)),
+    exp: request.exp ?? null,
+    issued_at: 1_234_567_800,
+    result_hash: sha256CanonicalJson(result),
     relay: {
-      callback_url: "https://relay.glyphq.org/v2/session/session-id/callback/callback-cap",
+      callback_url: CALLBACK_URL,
       official_relay: true,
       route: "v2_session_callback",
       v1_nonce: null,
@@ -58,7 +75,7 @@ async function createSignedEnvelope(overrides: Partial<GlyphCallbackSignaturePay
     },
     ...overrides,
   };
-  const signedPayload = canonicalize(payload);
+  const signedPayload = canonicalJson(payload);
   const signature = await sign(k12(new TextEncoder().encode(signedPayload), 32), seed);
   const envelope: GlyphSignedCallbackEnvelope = {
     version: GLYPH_CALLBACK_ENVELOPE_VERSION,
@@ -66,53 +83,111 @@ async function createSignedEnvelope(overrides: Partial<GlyphCallbackSignaturePay
     payload,
     proof: {
       algorithm: GLYPH_CALLBACK_SIGNATURE_ALGORITHM,
-      identity: result.identity,
+      identity: result.status === "rejected" ? IDENTITY : result.identity,
       public_key: bytesToBase64(publicKey),
       signature: bytesToBase64(signature),
       signed_payload: signedPayload,
     },
   };
-  return { envelope, result, payload };
+  return { envelope, request, requestEnvelope, result, payload };
 }
 
-describe("Glyph signed callback verification", () => {
-  test("accepts actual SchnorrQ signed relay v2 callback envelopes", async () => {
-    const { envelope, result, payload } = await createSignedEnvelope();
+function verificationFor(input: Awaited<ReturnType<typeof createSignedEnvelope>>) {
+  return {
+    requireSigned: true,
+    expected: { nonce: input.request.nonce, type: input.request.type },
+    expectedRequestHash: input.requestEnvelope.request_hash,
+    expectedNetwork: input.requestEnvelope.network,
+    expectedDappOrigin: input.request.dapp.origin,
+    expectedExp: input.request.exp ?? null,
+    expectedCallbackUrl: CALLBACK_URL,
+    verifySignature: verifyWalletCallbackSignature,
+  };
+}
 
-    await expect(verifyCallbackEnvelope(envelope, {
-      requireSigned: true,
-      expected: { nonce: result.nonce, type: result.type },
-      expectedDappOrigin: "https://starter.glyphq.org",
-      expectedExp: payload.exp,
-      expectedCallbackUrl: payload.relay.callback_url,
-      verifySignature: verifyWalletCallbackSignature,
-    })).resolves.toEqual(result);
+function assertMainnetV2Request(request: GlyphRequest) {
+  const envelope = createMainnetGlyphEnvelope(request, CALLBACK_URL);
+  const url = buildGlyphUrl(envelope);
+
+  expect(envelope.protocol).toBe("glyph-connect-request/2");
+  expect(envelope.network).toEqual({ id: "qubic:mainnet" });
+  expect(envelope.network).toEqual(GLYPH_MAINNET_NETWORK);
+  expect(envelope.request_hash).toMatch(/^sha256:[A-Za-z0-9_-]{43}$/);
+  expect(envelope.request_hash).toBe(computeRequestHash(envelope));
+  expect(url).toStartWith("glyph://v2/request?d=");
+}
+
+describe("Glyph Connect v4 request initiation", () => {
+  test("creates v2 mainnet envelopes with deterministic request hashes for every request builder", () => {
+    assertMainnetV2Request(createConnectRequest({
+      type: "connect",
+      dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
+      permissions: ["transfer", "sign_message"],
+    }, { nonce: "connect-nonce-1234", exp: FUTURE_EXP }));
+    assertMainnetV2Request(createTransferRequest({
+      type: "transfer",
+      dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
+      to: IDENTITY,
+      amount: "1",
+      from: IDENTITY,
+    }, { nonce: "transfer-nonce-1234", exp: FUTURE_EXP }));
+    assertMainnetV2Request(createSignMessageRequest({
+      type: "sign_message",
+      dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
+      message: "Glyph Connect v4",
+      from: IDENTITY,
+    }, { nonce: "sign-nonce-123456", exp: FUTURE_EXP }));
+    assertMainnetV2Request(createVerifyMessageRequest({
+      type: "verify_message",
+      dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
+      message: "Glyph Connect v4",
+      signature: "AA==",
+      public_key: "AA==",
+    }, { nonce: "verify-nonce-1234", exp: FUTURE_EXP }));
+  });
+});
+
+describe("Glyph Connect v4 signed callback verification", () => {
+  test("accepts a SchnorrQ K12-signed callback bound to the prepared v2 request", async () => {
+    const signed = await createSignedEnvelope();
+
+    await expect(verifyCallbackEnvelope(signed.envelope, verificationFor(signed))).resolves.toEqual(signed.result);
   });
 
-  test("rejects tampered signed payloads", async () => {
-    const { envelope, result, payload } = await createSignedEnvelope();
+  test("accepts a signed user rejection that is bound to the prepared request", async () => {
+    const signed = await createSignedEnvelope({
+      status: "rejected",
+      type: "connect",
+      nonce: "nonce-test-123456",
+      reason: "user_rejected",
+    });
+
+    await expect(verifyCallbackEnvelope(signed.envelope, verificationFor(signed))).resolves.toEqual(signed.result);
+  });
+
+  test("rejects signed callbacks with a mismatched request hash or network", async () => {
+    const signed = await createSignedEnvelope();
+
+    await expect(verifyCallbackEnvelope(signed.envelope, {
+      ...verificationFor(signed),
+      expectedRequestHash: "sha256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    })).rejects.toThrow("request_hash does not match expected request");
+    await expect(verifyCallbackEnvelope(signed.envelope, {
+      ...verificationFor(signed),
+      expectedNetwork: { id: "qubic:testnet" },
+    })).rejects.toThrow("network does not match expected network");
+  });
+
+  test("rejects tampered signed payloads and unsigned callbacks", async () => {
+    const signed = await createSignedEnvelope();
     const tampered = {
-      ...envelope,
-      payload: { ...envelope.payload, dapp_origin: "https://evil.example" },
+      ...signed.envelope,
+      payload: { ...signed.envelope.payload, dapp_origin: "https://evil.example" },
     };
 
-    await expect(verifyCallbackEnvelope(tampered, {
-      requireSigned: true,
-      expected: { nonce: result.nonce, type: result.type },
-      expectedDappOrigin: "https://starter.glyphq.org",
-      expectedExp: payload.exp,
-      expectedCallbackUrl: payload.relay.callback_url,
-      verifySignature: verifyWalletCallbackSignature,
-    })).rejects.toThrow();
-  });
-
-  test("rejects unsigned callbacks when strict relay verification is required", async () => {
-    const { result } = await createSignedEnvelope();
-
-    await expect(verifyCallbackEnvelope(result, {
-      requireSigned: true,
-      expected: { nonce: result.nonce, type: result.type },
-      verifySignature: verifyWalletCallbackSignature,
-    })).rejects.toThrow("signed Glyph callback envelope");
+    await expect(verifyCallbackEnvelope(tampered, verificationFor(signed))).rejects.toThrow();
+    await expect(verifyCallbackEnvelope(signed.result, verificationFor(signed))).rejects.toThrow(
+      "signed Glyph callback envelope",
+    );
   });
 });

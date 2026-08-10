@@ -11,6 +11,8 @@ import {
   type GlyphPermission,
   type GlyphRequest,
   type GlyphCallbackResponse,
+  type GlyphEnvelope,
+  type GlyphNetworkBinding,
   type GlyphRequestStatus,
 } from "@glyph-oss/connect";
 import type {
@@ -23,6 +25,8 @@ import type { Identity } from "@qubic.org/types";
 
 const STORAGE_KEY = "glyph-starter-account";
 export const GLYPH_REQUEST_STATUS_EVENT = "glyph:request-status";
+/** Every Glyph request from this dApp is explicitly bound to Qubic mainnet. */
+export const GLYPH_MAINNET_NETWORK: GlyphNetworkBinding = { id: "qubic:mainnet" };
 
 export type GlyphRequestFeedback =
   | { state: "opening" }
@@ -60,9 +64,12 @@ function mapRelayStatus(status: GlyphRequestStatus): GlyphRequestFeedback {
 
 async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackResponse> {
   const prepared = await prepareRelaySession();
+  const envelope = createMainnetGlyphEnvelope(request, prepared.callbackUrl);
   const resultPromise = subscribeViaRelayV2(request, prepared, {
     verification: {
       requireSigned: true,
+      expectedRequestHash: envelope.request_hash,
+      expectedNetwork: envelope.network,
       expectedDappOrigin: request.dapp.origin,
       expectedExp: request.exp ?? null,
       expectedCallbackUrl: prepared.callbackUrl,
@@ -71,9 +78,6 @@ async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackRes
     onStatus(status) {
       emitRequestFeedback(mapRelayStatus(status));
     },
-  });
-  const envelope = createEnvelope(request, {
-    callback: prepared.callbackUrl,
   });
 
   launchGlyphRequest(envelope);
@@ -85,6 +89,14 @@ async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackRes
   } catch (error) {
     throw error;
   }
+}
+
+/** Build the only envelope this dApp launches, with an explicit mainnet binding. */
+export function createMainnetGlyphEnvelope(request: GlyphRequest, callback: string): GlyphEnvelope {
+  return createEnvelope(request, {
+    callback,
+    network: GLYPH_MAINNET_NETWORK,
+  });
 }
 
 export function verifyWalletCallbackSignature(input: {
