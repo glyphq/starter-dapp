@@ -5,7 +5,6 @@ import {
   createTransferRequest,
   createVerifyMessageRequest,
   createEnvelope,
-  createNonce,
   launchGlyphRequest,
   subscribeViaRelay,
   relayCallbackUrl,
@@ -50,10 +49,6 @@ function emitRequestFeedback(detail: GlyphRequestFeedback) {
   window.dispatchEvent(new CustomEvent<GlyphRequestFeedback>(GLYPH_REQUEST_STATUS_EVENT, { detail }));
 }
 
-function glyphRelayUrl() {
-  return process.env.NEXT_PUBLIC_GLYPH_RELAY_URL ?? "https://relay.glyphq.org";
-}
-
 function mapRelayStatus(status: GlyphRequestStatus): GlyphRequestFeedback {
   switch (status.state) {
     case "opening_wallet": return { state: "opening" };
@@ -64,17 +59,13 @@ function mapRelayStatus(status: GlyphRequestStatus): GlyphRequestFeedback {
 }
 
 async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackResponse> {
-  const nonce = createNonce();
-  const relayUrl = glyphRelayUrl();
-  const envelope = createEnvelope(request, {
-    callback: relayCallbackUrl(nonce, relayUrl),
-  });
-
-  const resultPromise = subscribeViaRelay(nonce, {
-    relayUrl,
+  const resultPromise = subscribeViaRelay(request, {
     onStatus(status) {
       emitRequestFeedback(mapRelayStatus(status));
     },
+  });
+  const envelope = createEnvelope(request, {
+    callback: relayCallbackUrl(request.nonce),
   });
 
   launchGlyphRequest(envelope);
@@ -133,6 +124,19 @@ function base64ToBytes(value: string) {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
+function assertSameIdentity(actual: string, expected: string) {
+  if (actual !== expected) {
+    throw new Error("Glyph Wallet returned a response for a different identity.");
+  }
+}
+
+function assertPermissionsGranted(granted: GlyphPermission[]) {
+  const missing = permissions.filter((permission) => !granted.includes(permission));
+  if (missing.length) {
+    throw new Error("Glyph Wallet did not grant the requested permissions.");
+  }
+}
+
 export async function requestGlyphTransfer(destination: string, amount: string) {
   const account = readAccount();
   if (!account) throw new Error("Connect Glyph Wallet before requesting a transfer.");
@@ -149,6 +153,7 @@ export async function requestGlyphTransfer(destination: string, amount: string) 
   if (result.status !== "signed" || result.type !== "transfer") {
     throw new Error("Glyph Wallet returned an unexpected response.");
   }
+  assertSameIdentity(result.identity, account.identity);
   return { txId: result.tx_hash, targetTick: result.target_tick };
 }
 
@@ -168,6 +173,7 @@ export async function requestGlyphVerification(message: string, signatureHex: st
   if (result.status !== "verified") {
     throw new Error("Glyph Wallet returned an unexpected response.");
   }
+  assertSameIdentity(result.identity, account.identity);
   return result.valid;
 }
 
@@ -180,6 +186,7 @@ export const glyphConnector: WalletConnector = {
     );
     if (result.status === "rejected") throw new Error("Connection request was rejected.");
     if (result.status !== "connected") throw new Error("Glyph Wallet returned an unexpected response.");
+    assertPermissionsGranted(result.permissions);
     const account: WalletAccount = {
       identity: result.identity as Identity,
       name: "Glyph Wallet",
@@ -216,6 +223,7 @@ export const glyphConnector: WalletConnector = {
     if (result.status !== "signed" || result.type !== "sign_message") {
       throw new Error("Glyph Wallet returned an unexpected response.");
     }
+    assertSameIdentity(result.identity, account.identity);
     return {
       signatureHex: toHex(base64ToBytes(result.signature)),
       digestHex: toHex(k12(new TextEncoder().encode(message), 32)),

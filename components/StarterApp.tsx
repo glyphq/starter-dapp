@@ -47,22 +47,40 @@ type ConnectorDetail = {
 const connectorDetails: Record<string, ConnectorDetail> = {
   "glyph-wallet": {
     label: "Glyph Wallet",
-    description: "Connect through the Glyph desktop application.",
+    description: "Desktop approval through Glyph.",
     Icon: Wallet,
   },
   "qubic-extension": {
     label: "Qubic browser extension",
-    description: "Use the Qubic provider installed in this browser.",
+    description: "Use the browser provider.",
     Icon: Monitor,
     requirement: "Browser provider required",
   },
   walletconnect: {
     label: "WalletConnect",
-    description: "Pair a compatible Qubic wallet with a QR code.",
+    description: "Pair by QR code.",
     Icon: Smartphone,
     requirement: "Project ID required",
   },
 };
+
+const fallbackConnectorDetail: ConnectorDetail = {
+  label: "Wallet connector",
+  description: "Use this wallet provider.",
+  Icon: Wallet,
+};
+
+function connectorDetail(id: string): ConnectorDetail {
+  return connectorDetails[id] ?? fallbackConnectorDetail;
+}
+
+function connectorAvailable(connector: { isAvailable: () => boolean }) {
+  try {
+    return connector.isAvailable();
+  } catch {
+    return false;
+  }
+}
 
 function shortIdentity(identity: string) {
   return `${identity.slice(0, 12)}…${identity.slice(-12)}`;
@@ -121,7 +139,7 @@ export function StarterApp() {
   }, []);
 
   const activeDetail = useMemo(
-    () => (wallet.activeConnector ? connectorDetails[wallet.activeConnector.id] : null),
+    () => (wallet.activeConnector ? connectorDetail(wallet.activeConnector.id) : null),
     [wallet.activeConnector],
   );
 
@@ -242,85 +260,91 @@ export function StarterApp() {
       </header>
 
       <main className="wallet-stage">
-        <section className="wallet-card" aria-labelledby="wallet-state-title">
+        <section className="wallet-panel" aria-labelledby="wallet-state-title">
           {wallet.account && activeDetail ? (
             <>
-              <div className="wallet-mark connected"><activeDetail.Icon aria-hidden="true" /></div>
-              <p className="state-label"><CheckCircle aria-hidden="true" /> Connected with {activeDetail.label}</p>
-              <h1 id="wallet-state-title">Wallet connected</h1>
+              <div className="state-block">
+                <div className="wallet-mark connected"><activeDetail.Icon aria-hidden="true" /></div>
+                <p className="state-label"><CheckCircle aria-hidden="true" /> {activeDetail.label}</p>
+                <h1 id="wallet-state-title">Connected</h1>
+              </div>
               {glyphFeedback && (
                 <p className={`request-feedback request-feedback-${glyphFeedback.state}`} role="status">
                   {glyphFeedback.state === "opening" && "Opening Glyph Wallet"}
-                  {glyphFeedback.state === "waiting" && "Continue in Glyph Wallet. This page will update after your response."}
+                  {glyphFeedback.state === "waiting" && "Continue in Glyph Wallet"}
                   {glyphFeedback.state === "completed" && "Wallet response received"}
                   {glyphFeedback.state === "failed" && "The wallet request did not complete"}
                 </p>
               )}
-              <button className="identity" onClick={copyIdentity} title={wallet.account.identity}>
+              <button className="identity" type="button" onClick={copyIdentity} title={wallet.account.identity}>
                 <Key aria-hidden="true" />
                 <span>{shortIdentity(wallet.account.identity)}</span>
                 {copied ? <CheckCircle aria-label="Copied" /> : <Copy aria-label="Copy identity" />}
               </button>
 
-              <div className="wallet-actions" aria-label="Wallet actions">
-                <button className={activeAction === "transfer" ? "active" : ""} onClick={() => setActiveAction("transfer")}><SendSquare aria-hidden="true" />Transfer</button>
-                <button className={activeAction === "sign" ? "active" : ""} onClick={() => setActiveAction("sign")}><Pen aria-hidden="true" />Sign</button>
-                <button className={activeAction === "verify" ? "active" : ""} onClick={() => setActiveAction("verify")}><ShieldCheck aria-hidden="true" />Verify</button>
+              <div className="section-divider" aria-hidden="true" />
+
+              <div className="wallet-actions" role="tablist" aria-label="Wallet actions">
+                <button type="button" role="tab" aria-selected={activeAction === "transfer"} className={activeAction === "transfer" ? "active" : ""} onClick={() => setActiveAction("transfer")}><SendSquare aria-hidden="true" />Transfer</button>
+                <button type="button" role="tab" aria-selected={activeAction === "sign"} className={activeAction === "sign" ? "active" : ""} onClick={() => setActiveAction("sign")}><Pen aria-hidden="true" />Sign</button>
+                <button type="button" role="tab" aria-selected={activeAction === "verify"} className={activeAction === "verify" ? "active" : ""} onClick={() => setActiveAction("verify")}><ShieldCheck aria-hidden="true" />Verify</button>
               </div>
 
-              <div className="action-area">
+              <div className="action-area" aria-live="polite">
                 {activeAction === "transfer" && (
-                  <>
-                    <p className="action-note">This requests a real wallet-approved transfer on Qubic mainnet.</p>
+                  <form onSubmit={(event) => { event.preventDefault(); void sendTransfer(); }}>
+                    <p className="action-note">Real mainnet transfer. The wallet must approve it.</p>
                     <label htmlFor="destination">Destination identity</label>
                     <input id="destination" value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="60-character Qubic identity" />
                     <label htmlFor="amount">Amount</label>
                     <input id="amount" inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} />
-                    <button className="button" onClick={sendTransfer} disabled={isTransferring || !destination.trim() || !amount.trim()}>
+                    <button className="button" type="submit" disabled={isTransferring || !destination.trim() || !amount.trim()}>
                       {isTransferring ? <LoadingIcon /> : <SendSquare aria-hidden="true" />}
-                      {isTransferring ? "Waiting for approval" : "Test transfer"}
+                      {isTransferring ? "Waiting for approval" : "Request transfer"}
                     </button>
                     {transferResult && <p className="compact-result" role="status"><CheckCircle aria-hidden="true" />Transfer submitted: <code>{transferResult}</code></p>}
-                  </>
+                  </form>
                 )}
 
                 {activeAction === "sign" && (
-                  <>
+                  <form onSubmit={(event) => { event.preventDefault(); void signMessage(); }}>
                     <label htmlFor="message">Message</label>
                     <textarea id="message" value={message} onChange={(event) => setMessage(event.target.value)} rows={2} />
-                    <button className="button" onClick={signMessage} disabled={isSigning || !message.trim()}>
+                    <button className="button" type="submit" disabled={isSigning || !message.trim()}>
                       {isSigning ? <LoadingIcon /> : <Pen aria-hidden="true" />}
                       {isSigning ? "Waiting for approval" : "Sign message"}
                     </button>
                     {signature && <p className="compact-result" role="status"><CheckCircle aria-hidden="true" />Signature: <code>{signature}</code></p>}
-                  </>
+                  </form>
                 )}
 
                 {activeAction === "verify" && (
-                  <>
+                  <form onSubmit={(event) => { event.preventDefault(); void verifyMessageSignature(); }}>
                     <p className="action-note">{wallet.activeConnector?.id === "glyph-wallet" ? "Glyph Wallet will display and verify this signature." : "This signature is verified locally against the connected identity."}</p>
                     <label htmlFor="verify-message">Message</label>
                     <textarea id="verify-message" value={message} onChange={(event) => setMessage(event.target.value)} rows={2} />
                     <label htmlFor="signature">Signature</label>
                     <textarea id="signature" value={verifySignature} onChange={(event) => setVerifySignature(event.target.value)} rows={2} placeholder="Hexadecimal signature" />
-                    <button className="button" onClick={verifyMessageSignature} disabled={isVerifying || !message.trim() || !verifySignature.trim()}>{isVerifying ? <LoadingIcon /> : <ShieldCheck aria-hidden="true" />}{isVerifying ? "Waiting for verification" : "Verify signature"}</button>
+                    <button className="button" type="submit" disabled={isVerifying || !message.trim() || !verifySignature.trim()}>{isVerifying ? <LoadingIcon /> : <ShieldCheck aria-hidden="true" />}{isVerifying ? "Waiting for verification" : "Verify signature"}</button>
                     {verificationResult !== null && <p className={`compact-result ${verificationResult ? "valid" : "invalid"}`} role="status"><ShieldCheck aria-hidden="true" />{verificationResult ? "Signature is valid" : "Signature is not valid"}</p>}
-                  </>
+                  </form>
                 )}
               </div>
 
-              <button className="quiet-button" onClick={disconnect} disabled={Boolean(pendingId)}>
+              <button className="quiet-button" type="button" onClick={disconnect} disabled={Boolean(pendingId)}>
                 {pendingId ? <LoadingIcon /> : <Logout aria-hidden="true" />}
                 Disconnect wallet
               </button>
             </>
           ) : (
             <>
-              <div className="wallet-mark"><Wallet aria-hidden="true" /></div>
-              <p className="state-label">Qubic wallet connection</p>
-              <h1 id="wallet-state-title">No wallet connected</h1>
-              <p className="state-copy">Choose a connector to continue with this application.</p>
-              <button ref={connectButtonRef} className="button connect-button" onClick={openConnectorModal}>
+              <div className="state-block">
+                <div className="wallet-mark"><Wallet aria-hidden="true" /></div>
+                <p className="state-label">Qubic wallet</p>
+                <h1 id="wallet-state-title">Connect with calm</h1>
+                <p className="state-copy">Choose a connector. Approval stays in the wallet.</p>
+              </div>
+              <button ref={connectButtonRef} className="button connect-button" type="button" onClick={openConnectorModal}>
                 <PlugCircle aria-hidden="true" />
                 Connect wallet
               </button>
@@ -356,15 +380,15 @@ export function StarterApp() {
               <p className="dialog-eyebrow">Connect wallet</p>
               <h2 id="connector-dialog-title">Choose a connector</h2>
             </div>
-            <button className="icon-button" onClick={closeConnectorModal} disabled={Boolean(pendingId)} aria-label="Close connector selection">
+            <button className="icon-button" type="button" onClick={closeConnectorModal} disabled={Boolean(pendingId)} aria-label="Close connector selection">
               <CloseCircle aria-hidden="true" />
             </button>
           </div>
 
           <div className="connector-list">
             {wallet.connectors.map((connector) => {
-              const detail = connectorDetails[connector.id];
-              const available = mounted && connector.isAvailable();
+              const detail = connectorDetail(connector.id);
+              const available = mounted && connectorAvailable(connector);
               const needsProjectId = connector.id === "walletconnect" && !hasWalletConnectProjectId;
               const disabled = Boolean(pendingId) || !available || needsProjectId;
               const Icon = detail.Icon;
@@ -374,6 +398,7 @@ export function StarterApp() {
                   disabled={disabled}
                   key={connector.id}
                   onClick={() => connect(connector.id)}
+                  type="button"
                 >
                   <span className="connector-icon"><Icon aria-hidden="true" /></span>
                   <span className="connector-copy">

@@ -62,14 +62,12 @@ NEXT_PUBLIC_APP_ORIGIN=https://starter.glyphq.org
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=
 ```
 
-`NEXT_PUBLIC_APP_ORIGIN` identifies the application to Glyph Wallet and must use
-HTTPS. The callback page remains available at `/__glyph__/`.
+`NEXT_PUBLIC_APP_ORIGIN` identifies the application to Glyph Wallet and must be
+a credential-free public HTTPS origin with no path, query, or fragment.
 
-Glyph Wallet returns desktop requests through a browser callback tab. Glyph
-Connect broadcasts the result to the original page and immediately requests
-that the callback tab close. The application cannot prevent the operating
-system from opening that callback because the desktop wallet controls the
-return navigation.
+Glyph Wallet returns desktop requests through the official Glyph relay. The app
+opens an SSE stream for the same request nonce used in the wallet callback URL,
+then validates the returned nonce and request type through `@glyph-oss/connect`.
 
 WalletConnect remains visible but disabled until a project ID is configured.
 
@@ -88,8 +86,7 @@ WalletConnect remains visible but disabled until a project ID is configured.
 
 ```text
 app/
-  %5F%5Fglyph%5F%5F/  Glyph callback route exposed as /__glyph__/
-  globals.css          Glyph interface system
+  globals.css          Glyph wallet-inspired interface system
   layout.tsx           Metadata, fonts, and providers
   page.tsx             Application entry
 components/
@@ -105,7 +102,7 @@ scripts/
 ## Static deployment
 
 The production build is exported to `out/`. The host must serve the generated
-HTML files and preserve the `/__glyph__/` callback route.
+HTML files from the same public HTTPS origin configured in `NEXT_PUBLIC_APP_ORIGIN`.
 
 ```bash
 bun run build
@@ -119,8 +116,9 @@ The app uses the same visual foundation as the Glyph public website:
 - Geist and Geist Mono from local packages
 - Monochrome OLED surfaces
 - Warm neutral light mode
-- Solar icons
-- Restrained rounded geometry
+- Linear Solar icons
+- Divider-led hierarchy with shared elevated controls
+- Restrained rounded geometry and no card grids
 - Semantic success, warning, and error states
 - Reduced-motion support
 - WCAG 2.2 AA interaction targets and focus states

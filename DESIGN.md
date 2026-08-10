@@ -2,13 +2,13 @@
 
 ## Direction
 
-The interface extends the Glyph website system into a focused product UI. It uses monochrome OLED surfaces, rounded but restrained geometry, strong type hierarchy, and compact technical metadata. Structure comes from spacing, contrast, and alignment rather than heavy borders.
+The interface extends Glyph wallet principles into a focused product UI. It uses calm monochrome surfaces, restrained geometry, quiet technical metadata, and divider-led hierarchy. The workspace avoids card grids so the wallet state, selected action, and connector sheet feel like one shared control surface.
 
 ## Typography
 
 - Geist for interface and editorial text.
 - Geist Mono for identities, tick values, status labels, and technical metadata.
-- Fixed, readable product-interface sizing rather than landing-page display scale.
+- Minimal copy with readable product-interface sizing rather than landing-page display scale.
 
 ## Color
 
@@ -16,22 +16,23 @@ Dark mode is the primary presentation and uses black, near-black surfaces, white
 
 ## Geometry
 
-- Small controls: 8px radius.
-- Panels: 16px radius.
-- Primary controls: minimum 46px height.
-- Layout width: 1280px maximum with responsive gutters.
+- Small controls: 10px radius.
+- Sheets and rails: 16 to 24px radius.
+- Primary controls: minimum 48px height.
+- Layout width: 580px centered wallet workspace with responsive gutters.
 
 ## Interaction
 
 - No page transitions.
-- No button movement on hover.
+- No button movement or shrink-on-click.
 - Short color and opacity changes only.
 - Loading controls replace their leading icon with a spinner.
+- Keyboard focus is visible on every pressable control and field.
 - Every state remains understandable with reduced motion enabled.
 
 ## Iconography
 
-Solar icons only. Buttons use one meaningful leading icon. Arrows and generic external-link glyphs are not used as button decoration.
+Solar icons only, globally rendered in a linear/outline style. Buttons use one meaningful leading icon. Arrows and generic external-link glyphs are not used as button decoration.
 
 ## Responsive behavior
 
