@@ -88,6 +88,22 @@ export function prewarmGlyphRelaySession(): Promise<GlyphPreparedRelaySession> {
   return relaySessionPreparation;
 }
 
+/**
+ * Bind relay preparation to deliberate interaction with the Connect control.
+ *
+ * These handlers intentionally only prepare the callback session. They never
+ * launch a Wallet request, which remains in the connector's activating click
+ * path after a registered session has been obtained.
+ */
+export function createGlyphConnectIntentHandlers(onIntent: () => void) {
+  return {
+    onPointerEnter: onIntent,
+    onFocus: onIntent,
+    onTouchStart: onIntent,
+    onClick: onIntent,
+  };
+}
+
 export function isGlyphRelaySessionReady() {
   return preparedRelaySession !== null;
 }

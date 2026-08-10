@@ -20,6 +20,7 @@ import {
 import { QRCodeSVG } from "qrcode.react";
 import {
   useMemo,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -30,6 +31,7 @@ import {
 import { hasWalletConnectProjectId } from "@/lib/connectors";
 import {
   GLYPH_REQUEST_STATUS_EVENT,
+  createGlyphConnectIntentHandlers,
   isGlyphRelaySessionReady,
   prewarmGlyphRelaySession,
   requestGlyphTransfer,
@@ -146,10 +148,7 @@ export function StarterApp() {
     [wallet.activeConnector],
   );
 
-  function openConnectorModal() {
-    setActionError(null);
-    setPairingUri(null);
-    dialogRef.current?.showModal();
+  const prewarmGlyphRelayForConnectIntent = useCallback(() => {
     setGlyphRelayReady(isGlyphRelaySessionReady());
     void prewarmGlyphRelaySession()
       .then(() => setGlyphRelayReady(true))
@@ -157,6 +156,18 @@ export function StarterApp() {
         setGlyphRelayReady(false);
         setActionError(error instanceof Error ? error.message : "Could not prepare a secure Glyph session.");
       });
+  }, []);
+
+  const glyphConnectIntentHandlers = useMemo(
+    () => createGlyphConnectIntentHandlers(prewarmGlyphRelayForConnectIntent),
+    [prewarmGlyphRelayForConnectIntent],
+  );
+
+  function openConnectorModal() {
+    setActionError(null);
+    setPairingUri(null);
+    dialogRef.current?.showModal();
+    setGlyphRelayReady(isGlyphRelaySessionReady());
   }
 
   function closeConnectorModal() {
@@ -360,7 +371,18 @@ export function StarterApp() {
                 <h1 id="wallet-state-title">Connect with calm</h1>
                 <p className="state-copy">Choose a connector. Approval stays in the wallet.</p>
               </div>
-              <button ref={connectButtonRef} className="button connect-button" type="button" onClick={openConnectorModal}>
+              <button
+                ref={connectButtonRef}
+                className="button connect-button"
+                type="button"
+                onPointerEnter={glyphConnectIntentHandlers.onPointerEnter}
+                onFocus={glyphConnectIntentHandlers.onFocus}
+                onTouchStart={glyphConnectIntentHandlers.onTouchStart}
+                onClick={() => {
+                  glyphConnectIntentHandlers.onClick();
+                  openConnectorModal();
+                }}
+              >
                 <PlugCircle aria-hidden="true" />
                 Connect wallet
               </button>
