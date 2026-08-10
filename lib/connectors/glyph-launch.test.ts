@@ -52,11 +52,21 @@ mock.module("@qubic.org/crypto", () => ({
   verify: () => true,
 }));
 
-const { glyphConnector, isGlyphRelaySessionReady, prewarmGlyphRelaySession } = await import("./glyph");
+const {
+  createGlyphConnectIntentHandlers,
+  glyphConnector,
+  isGlyphRelaySessionReady,
+  prewarmGlyphRelaySession,
+} = await import("./glyph");
 
 describe("Glyph secure relay launch", () => {
-  test("gates an unready session and launches synchronously once the registered session is prewarmed", async () => {
-    const warming = prewarmGlyphRelaySession();
+  test("prewarms once for deliberate Connect intents and launches only after registration", async () => {
+    expect(events).toEqual([]);
+    const intents = createGlyphConnectIntentHandlers(prewarmGlyphRelaySession);
+    const warming = intents.onPointerEnter();
+    expect(intents.onFocus()).toBe(warming);
+    expect(intents.onTouchStart()).toBe(warming);
+    expect(intents.onClick()).toBe(warming);
     expect(events).toEqual(["prepare"]);
     expect(isGlyphRelaySessionReady()).toBe(false);
 
