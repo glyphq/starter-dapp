@@ -6,8 +6,8 @@ import {
   createVerifyMessageRequest,
   createEnvelope,
   launchGlyphRequest,
-  subscribeViaRelay,
-  relayCallbackUrl,
+  prepareRelaySession,
+  subscribeViaRelayV2,
   type GlyphPermission,
   type GlyphRequest,
   type GlyphCallbackResponse,
@@ -59,13 +59,14 @@ function mapRelayStatus(status: GlyphRequestStatus): GlyphRequestFeedback {
 }
 
 async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackResponse> {
-  const resultPromise = subscribeViaRelay(request, {
+  const prepared = await prepareRelaySession();
+  const resultPromise = subscribeViaRelayV2(request, prepared, {
     onStatus(status) {
       emitRequestFeedback(mapRelayStatus(status));
     },
   });
   const envelope = createEnvelope(request, {
-    callback: relayCallbackUrl(request.nonce),
+    callback: prepared.callbackUrl,
   });
 
   launchGlyphRequest(envelope);

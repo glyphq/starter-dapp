@@ -65,9 +65,10 @@ NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=
 `NEXT_PUBLIC_APP_ORIGIN` identifies the application to Glyph Wallet and must be
 a credential-free public HTTPS origin with no path, query, or fragment.
 
-Glyph Wallet returns desktop requests through the official Glyph relay. The app
-opens an SSE stream for the same request nonce used in the wallet callback URL,
-then validates the returned nonce and request type through `@glyph-oss/connect`.
+Glyph Wallet returns desktop requests through the official Glyph relay v2 flow.
+The app prepares and registers a relay session before launch, passes only the
+prepared callback capability to the wallet, and keeps the read capability in the
+dApp subscription for result validation through `@glyph-oss/connect`.
 
 WalletConnect remains visible but disabled until a project ID is configured.
 
