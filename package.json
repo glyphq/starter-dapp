@@ -21,22 +21,22 @@
     "@qubic.org/types": "1.0.0",
     "@solar-icons/react": "^1.1.1",
     "@walletconnect/sign-client": "^2.23.10",
-    "next": "16.2.10",
+    "next": "16.2.11",
     "qrcode.react": "^4.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.10",
-    "playwright": "^1.61.1",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.2.11",
+    "playwright": "^1.62.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
   },
   "ignoreScripts": [
     "sharp",
@@ -45,5 +45,17 @@
   "trustedDependencies": [
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "overrides": {
+    "sharp": "0.35.3",
+    "postcss": "8.5.26",
+    "nanoid": "3.3.17",
+    "brace-expansion": "1.1.18",
+    "js-yaml": "4.3.1",
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": {
+        "brace-expansion": "5.0.9"
+      }
+    }
+  }
 }
