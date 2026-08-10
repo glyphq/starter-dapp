@@ -1,4 +1,4 @@
-import { identityToPublicKey, k12 } from "@qubic.org/crypto";
+import { identityToPublicKey, k12, verify } from "@qubic.org/crypto";
 import {
   createConnectRequest,
   createSignMessageRequest,
@@ -61,6 +61,13 @@ function mapRelayStatus(status: GlyphRequestStatus): GlyphRequestFeedback {
 async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackResponse> {
   const prepared = await prepareRelaySession();
   const resultPromise = subscribeViaRelayV2(request, prepared, {
+    verification: {
+      requireSigned: true,
+      expectedDappOrigin: request.dapp.origin,
+      expectedExp: request.exp ?? null,
+      expectedCallbackUrl: prepared.callbackUrl,
+      verifySignature: verifyWalletCallbackSignature,
+    },
     onStatus(status) {
       emitRequestFeedback(mapRelayStatus(status));
     },
@@ -78,6 +85,14 @@ async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackRes
   } catch (error) {
     throw error;
   }
+}
+
+export function verifyWalletCallbackSignature(input: {
+  payload: Uint8Array;
+  signature: Uint8Array;
+  publicKey: Uint8Array;
+}) {
+  return verify(k12(input.payload, 32), input.signature, input.publicKey);
 }
 
 function saveAccount(account: WalletAccount | null) {
