@@ -34,9 +34,11 @@ The interface provides:
 | Qubic browser extension | `@qubic.org/react` | Injected Qubic browser provider |
 | WalletConnect | `@qubic.org/react` | WalletConnect project ID |
 
-The Glyph integration uses native Glyph Connect requests for wallet-approved
-transfers, message signing, and signature verification. Signature values are
-normalized to the hexadecimal format used by the shared Qubic connector API.
+The Glyph integration uses `@glyph-oss/connect@4.0.0` native Glyph Connect v2
+requests for wallet-approved transfers, message signing, and signature
+verification. Every launched request explicitly binds to `qubic:mainnet`.
+Signature values are normalized to the hexadecimal format used by the shared
+Qubic connector API.
 
 ## Requirements
 
@@ -70,6 +72,23 @@ The app prepares and registers a relay session before launch, passes only the
 prepared callback capability to the wallet, and keeps the read capability in the
 dApp subscription for result validation through `@glyph-oss/connect`.
 
+## Glyph Connect v4 protocol and callback security
+
+Glyph launches only `glyph://v2/request?d=<base64url-envelope>` URLs. The v2
+envelope uses `glyph-connect-request/2`, includes a deterministic
+`sha256:<base64url>` request hash, and explicitly binds the request to
+`qubic:mainnet`. Legacy request links are not supported.
+
+Relay results must be signed `glyph-connect-callback-envelope/2` responses. The
+connector requires `@glyph-oss/connect` verification before accepting a result:
+
+- Qubic SchnorrQ verification over the K12 digest of the canonical signed payload
+- the request nonce and type
+- the prepared envelope's request hash and mainnet binding
+- the configured dApp origin, request expiry, and prepared relay callback URL
+
+Unsigned, tampered, cross-network, or mismatched callback envelopes are rejected.
+
 WalletConnect remains visible but disabled until a project ID is configured.
 
 ## Commands
@@ -79,7 +98,7 @@ WalletConnect remains visible but disabled until a project ID is configured.
 | `bun run dev` | Start the development server |
 | `bun run typecheck` | Check TypeScript |
 | `bun run lint` | Run ESLint |
-| `bun run test` | Run type checking and linting |
+| `bun run test` | Run type checking, linting, and protocol unit tests |
 | `bun run build` | Create the static production export |
 | `bun run qa` | Run responsive Playwright and axe checks |
 
