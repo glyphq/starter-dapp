@@ -31,7 +31,7 @@ import {
 import { hasWalletConnectProjectId } from "@/lib/connectors";
 import {
   GLYPH_REQUEST_STATUS_EVENT,
-  createGlyphConnectIntentHandlers,
+  createGlyphRequestIntentHandlers,
   isGlyphRelaySessionReady,
   prewarmGlyphRelaySession,
   requestGlyphTransfer,
@@ -124,6 +124,7 @@ export function StarterApp() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [glyphFeedback, setGlyphFeedback] = useState<GlyphRequestFeedback | null>(null);
   const [glyphRelayReady, setGlyphRelayReady] = useState(false);
+  const [glyphRelayPreparing, setGlyphRelayPreparing] = useState(false);
 
   useEffect(() => {
     let clearTimer: number | undefined;
@@ -148,19 +149,42 @@ export function StarterApp() {
     [wallet.activeConnector],
   );
 
-  const prewarmGlyphRelayForConnectIntent = useCallback(() => {
-    setGlyphRelayReady(isGlyphRelaySessionReady());
+  const prepareGlyphRelayForIntent = useCallback(() => {
+    const ready = isGlyphRelaySessionReady();
+    setGlyphRelayReady(ready);
+    if (ready) {
+      setGlyphRelayPreparing(false);
+      return;
+    }
+
+    setGlyphRelayPreparing(true);
+    setActionError(null);
     void prewarmGlyphRelaySession()
-      .then(() => setGlyphRelayReady(true))
+      .then(() => {
+        setGlyphRelayReady(true);
+        setGlyphRelayPreparing(false);
+      })
       .catch((error) => {
         setGlyphRelayReady(false);
-        setActionError(error instanceof Error ? error.message : "Could not prepare a secure Glyph session.");
+        setGlyphRelayPreparing(false);
+        setActionError(
+          error instanceof Error
+            ? error.message
+            : "Could not prepare a secure Glyph session. Try the request again.",
+        );
       });
   }, []);
 
   const glyphConnectIntentHandlers = useMemo(
-    () => createGlyphConnectIntentHandlers(prewarmGlyphRelayForConnectIntent),
-    [prewarmGlyphRelayForConnectIntent],
+    () => createGlyphRequestIntentHandlers(prepareGlyphRelayForIntent),
+    [prepareGlyphRelayForIntent],
+  );
+
+  const glyphActionIntentHandlers = useMemo(
+    () => createGlyphRequestIntentHandlers(() => {
+      if (wallet.activeConnector?.id === "glyph-wallet") prepareGlyphRelayForIntent();
+    }),
+    [prepareGlyphRelayForIntent, wallet.activeConnector?.id],
   );
 
   function openConnectorModal() {
@@ -178,12 +202,14 @@ export function StarterApp() {
 
   async function connect(connectorId: string) {
     if (connectorId === "glyph-wallet" && !isGlyphRelaySessionReady()) {
-      setGlyphRelayReady(false);
-      void prewarmGlyphRelaySession().then(() => setGlyphRelayReady(true)).catch(() => undefined);
+      prepareGlyphRelayForIntent();
       return;
     }
     setPendingId(connectorId);
-    if (connectorId === "glyph-wallet") setGlyphRelayReady(false);
+    if (connectorId === "glyph-wallet") {
+      setGlyphRelayReady(false);
+      setGlyphRelayPreparing(false);
+    }
     setPairingUri(null);
     setActionError(null);
     try {
@@ -210,6 +236,10 @@ export function StarterApp() {
   }
 
   async function signMessage() {
+    if (wallet.activeConnector?.id === "glyph-wallet" && !isGlyphRelaySessionReady()) {
+      prepareGlyphRelayForIntent();
+      return;
+    }
     setIsSigning(true);
     setSignature(null);
     setActionError(null);
@@ -225,6 +255,10 @@ export function StarterApp() {
 
   async function sendTransfer() {
     if (!wallet.activeConnector) return;
+    if (wallet.activeConnector.id === "glyph-wallet" && !isGlyphRelaySessionReady()) {
+      prepareGlyphRelayForIntent();
+      return;
+    }
     setIsTransferring(true);
     setTransferResult(null);
     setActionError(null);
@@ -248,6 +282,10 @@ export function StarterApp() {
 
   async function verifyMessageSignature() {
     if (!wallet.account || !wallet.activeConnector) return;
+    if (wallet.activeConnector.id === "glyph-wallet" && !isGlyphRelaySessionReady()) {
+      prepareGlyphRelayForIntent();
+      return;
+    }
     setIsVerifying(true);
     setActionError(null);
     try {
@@ -303,6 +341,11 @@ export function StarterApp() {
                   {glyphFeedback.state === "failed" && "The wallet request did not complete"}
                 </p>
               )}
+              {glyphRelayPreparing && (
+                <p className="request-feedback request-feedback-opening" role="status">
+                  Preparing a secure Glyph session. Try the request again when it is ready.
+                </p>
+              )}
               <button className="identity" type="button" onClick={copyIdentity} title={wallet.account.identity}>
                 <Key aria-hidden="true" />
                 <span>{shortIdentity(wallet.account.identity)}</span>
@@ -319,7 +362,7 @@ export function StarterApp() {
 
               <div className="action-area" aria-live="polite">
                 {activeAction === "transfer" && (
-                  <form onSubmit={(event) => { event.preventDefault(); void sendTransfer(); }}>
+                  <form {...glyphActionIntentHandlers} onSubmit={(event) => { event.preventDefault(); void sendTransfer(); }}>
                     <p className="action-note">Real mainnet transfer. The wallet must approve it.</p>
                     <label htmlFor="destination">Destination identity</label>
                     <input id="destination" value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="60-character Qubic identity" />
@@ -327,32 +370,32 @@ export function StarterApp() {
                     <input id="amount" inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} />
                     <button className="button" type="submit" disabled={isTransferring || !destination.trim() || !amount.trim()}>
                       {isTransferring ? <LoadingIcon /> : <SendSquare aria-hidden="true" />}
-                      {isTransferring ? "Waiting for approval" : "Request transfer"}
+                      {isTransferring ? "Waiting for approval" : glyphRelayPreparing ? "Preparing secure session" : "Request transfer"}
                     </button>
                     {transferResult && <p className="compact-result" role="status"><CheckCircle aria-hidden="true" />Transfer submitted: <code>{transferResult}</code></p>}
                   </form>
                 )}
 
                 {activeAction === "sign" && (
-                  <form onSubmit={(event) => { event.preventDefault(); void signMessage(); }}>
+                  <form {...glyphActionIntentHandlers} onSubmit={(event) => { event.preventDefault(); void signMessage(); }}>
                     <label htmlFor="message">Message</label>
                     <textarea id="message" value={message} onChange={(event) => setMessage(event.target.value)} rows={2} />
                     <button className="button" type="submit" disabled={isSigning || !message.trim()}>
                       {isSigning ? <LoadingIcon /> : <Pen aria-hidden="true" />}
-                      {isSigning ? "Waiting for approval" : "Sign message"}
+                      {isSigning ? "Waiting for approval" : glyphRelayPreparing ? "Preparing secure session" : "Sign message"}
                     </button>
                     {signature && <p className="compact-result" role="status"><CheckCircle aria-hidden="true" />Signature: <code>{signature}</code></p>}
                   </form>
                 )}
 
                 {activeAction === "verify" && (
-                  <form onSubmit={(event) => { event.preventDefault(); void verifyMessageSignature(); }}>
+                  <form {...glyphActionIntentHandlers} onSubmit={(event) => { event.preventDefault(); void verifyMessageSignature(); }}>
                     <p className="action-note">{wallet.activeConnector?.id === "glyph-wallet" ? "Glyph Wallet will display and verify this signature." : "This signature is verified locally against the connected identity."}</p>
                     <label htmlFor="verify-message">Message</label>
                     <textarea id="verify-message" value={message} onChange={(event) => setMessage(event.target.value)} rows={2} />
                     <label htmlFor="signature">Signature</label>
                     <textarea id="signature" value={verifySignature} onChange={(event) => setVerifySignature(event.target.value)} rows={2} placeholder="Hexadecimal signature" />
-                    <button className="button" type="submit" disabled={isVerifying || !message.trim() || !verifySignature.trim()}>{isVerifying ? <LoadingIcon /> : <ShieldCheck aria-hidden="true" />}{isVerifying ? "Waiting for verification" : "Verify signature"}</button>
+                    <button className="button" type="submit" disabled={isVerifying || !message.trim() || !verifySignature.trim()}>{isVerifying ? <LoadingIcon /> : <ShieldCheck aria-hidden="true" />}{isVerifying ? "Waiting for verification" : glyphRelayPreparing ? "Preparing secure session" : "Verify signature"}</button>
                     {verificationResult !== null && <p className={`compact-result ${verificationResult ? "valid" : "invalid"}`} role="status"><ShieldCheck aria-hidden="true" />{verificationResult ? "Signature is valid" : "Signature is not valid"}</p>}
                   </form>
                 )}
@@ -429,13 +472,14 @@ export function StarterApp() {
               const available = mounted && connectorAvailable(connector);
               const needsProjectId = connector.id === "walletconnect" && !hasWalletConnectProjectId;
               const glyphPreparing = connector.id === "glyph-wallet" && !glyphRelayReady;
-              const disabled = Boolean(pendingId) || !available || needsProjectId || glyphPreparing;
+              const disabled = Boolean(pendingId) || !available || needsProjectId;
               const Icon = detail.Icon;
               return (
                 <button
                   className="connector-option"
                   disabled={disabled}
                   key={connector.id}
+                  {...(connector.id === "glyph-wallet" ? glyphConnectIntentHandlers : {})}
                   onClick={() => connect(connector.id)}
                   type="button"
                 >
@@ -447,7 +491,9 @@ export function StarterApp() {
                       {needsProjectId
                         ? "Configuration required"
                         : glyphPreparing
-                          ? "Preparing secure session"
+                          ? glyphRelayPreparing
+                            ? "Preparing secure session"
+                            : "Click to prepare secure session"
                           : available
                             ? "Ready"
                             : detail.requirement ?? "Unavailable"}

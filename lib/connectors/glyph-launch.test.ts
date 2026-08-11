@@ -53,7 +53,7 @@ mock.module("@qubic.org/crypto", () => ({
 }));
 
 const {
-  createGlyphConnectIntentHandlers,
+  createGlyphRequestIntentHandlers,
   glyphConnector,
   isGlyphRelaySessionReady,
   prewarmGlyphRelaySession,
@@ -62,7 +62,7 @@ const {
 describe("Glyph secure relay launch", () => {
   test("prewarms once for deliberate Connect intents and launches only after registration", async () => {
     expect(events).toEqual([]);
-    const intents = createGlyphConnectIntentHandlers(prewarmGlyphRelaySession);
+    const intents = createGlyphRequestIntentHandlers(prewarmGlyphRelaySession);
     const warming = intents.onPointerEnter();
     expect(intents.onFocus()).toBe(warming);
     expect(intents.onTouchStart()).toBe(warming);
@@ -78,13 +78,13 @@ describe("Glyph secure relay launch", () => {
     expect(isGlyphRelaySessionReady()).toBe(true);
 
     const connecting = glyphConnector.connect();
-    expect(events).toEqual(["prepare", "subscribe", "launch", "prepare"]);
+    expect(events).toEqual(["prepare", "subscribe", "launch"]);
     expect(subscribedSession).toEqual(preparedSession);
     expect(subscribedSession?.registered).toBe(true);
     expect(isGlyphRelaySessionReady()).toBe(false);
 
     await expect(glyphConnector.connect()).rejects.toThrow("preparing a secure relay session");
-    expect(events).toEqual(["prepare", "subscribe", "launch", "prepare"]);
+    expect(events).toEqual(["prepare", "subscribe", "launch"]);
 
     resolveResult({
       status: "connected",

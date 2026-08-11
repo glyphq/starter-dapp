@@ -89,13 +89,13 @@ export function prewarmGlyphRelaySession(): Promise<GlyphPreparedRelaySession> {
 }
 
 /**
- * Bind relay preparation to deliberate interaction with the Connect control.
+ * Bind relay preparation to deliberate interaction with a Glyph request control.
  *
  * These handlers intentionally only prepare the callback session. They never
  * launch a Wallet request, which remains in the connector's activating click
  * path after a registered session has been obtained.
  */
-export function createGlyphConnectIntentHandlers(onIntent: () => void) {
+export function createGlyphRequestIntentHandlers(onIntent: () => void | Promise<unknown>) {
   return {
     onPointerEnter: onIntent,
     onFocus: onIntent,
@@ -103,6 +103,9 @@ export function createGlyphConnectIntentHandlers(onIntent: () => void) {
     onClick: onIntent,
   };
 }
+
+/** @deprecated Use createGlyphRequestIntentHandlers for all Glyph requests. */
+export const createGlyphConnectIntentHandlers = createGlyphRequestIntentHandlers;
 
 export function isGlyphRelaySessionReady() {
   return preparedRelaySession !== null;
@@ -136,10 +139,6 @@ async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackRes
   });
 
   launchGlyphRequest(envelope);
-  // Keep the next action ready without moving this action's custom-protocol click
-  // behind a network await. The current session was fully registered before launch.
-  void prewarmGlyphRelaySession();
-
   try {
     const result = await resultPromise;
     window.focus();
