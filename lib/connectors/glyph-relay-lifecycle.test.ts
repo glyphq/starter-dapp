@@ -47,6 +47,7 @@ mock.module("@glyph-oss/connect", () => ({
     nonce: "connect-nonce-1234",
     exp: 2_000_000_000,
   }),
+  createScCallRequest: () => { throw new Error("not used"); },
   createEnvelope: (request: Record<string, unknown>, options: Record<string, unknown>) => ({
     protocol: "glyph-connect-request/2",
     request,

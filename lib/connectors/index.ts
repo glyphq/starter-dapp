@@ -4,6 +4,7 @@ import {
   type WalletConnector,
 } from "@qubic.org/react";
 import { glyphConnector } from "./glyph";
+import { getGlyphAppOrigin } from "./glyph-origin";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 
@@ -18,7 +19,7 @@ const walletConnectConnector = createWalletConnectConnector({
       metadata: {
         name: "Glyph Qubic Starter",
         description: "A multi-wallet starter application for Qubic.",
-        url: process.env.NEXT_PUBLIC_APP_ORIGIN ?? "https://starter.glyphq.org",
+        url: getGlyphAppOrigin(),
         icons: [],
       },
     });

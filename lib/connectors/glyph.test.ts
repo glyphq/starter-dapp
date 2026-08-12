@@ -7,6 +7,7 @@ import {
   canonicalJson,
   computeRequestHash,
   createConnectRequest,
+  createScCallRequest,
   createSignMessageRequest,
   createTransferRequest,
   createVerifyMessageRequest,
@@ -18,7 +19,7 @@ import {
   type GlyphRequest,
   type GlyphSignedCallbackEnvelope,
 } from "@glyph-oss/connect";
-import { generateRandomSeed, k12, publicKeyFromSeed, sign } from "@qubic.org/crypto";
+import { generateRandomSeed, k12, publicKeyFromSeed, publicKeyToIdentity, sign } from "@qubic.org/crypto";
 import {
   buildGlyphSafeDiagnostic,
   createMainnetGlyphEnvelope,
@@ -62,29 +63,31 @@ async function createSignedEnvelope(
 ) {
   const seed = generateRandomSeed();
   const publicKey = publicKeyFromSeed(seed);
-  const request = result.type === "sign_message"
+  const walletIdentity = publicKeyToIdentity(publicKey);
+  const signedResult = result.status === "rejected" ? result : { ...result, identity: walletIdentity };
+  const request = signedResult.type === "sign_message"
     ? createSignMessageRequest({
         type: "sign_message",
         dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
         message: "Glyph Connect v4",
         from: IDENTITY,
-      }, { nonce: result.nonce, exp: FUTURE_EXP })
+      }, { nonce: signedResult.nonce, exp: FUTURE_EXP })
     : createConnectRequest({
         type: "connect",
         dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
         permissions: ["transfer", "sign_message"],
-      }, { nonce: result.nonce, exp: FUTURE_EXP });
+      }, { nonce: signedResult.nonce, exp: FUTURE_EXP });
   const requestEnvelope = createMainnetGlyphEnvelope(request, CALLBACK_URL);
   const payload: GlyphCallbackSignaturePayload = {
     version: GLYPH_CALLBACK_ENVELOPE_VERSION,
     request_hash: requestEnvelope.request_hash,
     network: requestEnvelope.network,
-    nonce: result.nonce,
+    nonce: signedResult.nonce,
     dapp_origin: canonicalDappOrigin(DAPP_ORIGIN),
-    request_type: result.type,
+    request_type: signedResult.type,
     exp: request.exp ?? null,
     issued_at: 1_234_567_800,
-    result_hash: sha256CanonicalJson(result),
+    result_hash: sha256CanonicalJson(signedResult),
     relay: {
       // Wallet signs the canonical binding without exposing the callback write capability.
       callback_url: walletSanitizedRelayCallbackUrl(CALLBACK_URL),
@@ -100,17 +103,17 @@ async function createSignedEnvelope(
   const signature = await sign(k12(new TextEncoder().encode(signedPayload), 32), seed);
   const envelope: GlyphSignedCallbackEnvelope = {
     version: GLYPH_CALLBACK_ENVELOPE_VERSION,
-    result,
+    result: signedResult,
     payload,
     proof: {
       algorithm: GLYPH_CALLBACK_SIGNATURE_ALGORITHM,
-      identity: result.status === "rejected" ? IDENTITY : result.identity,
+      identity: walletIdentity,
       public_key: bytesToBase64(publicKey),
       signature: bytesToBase64(signature),
       signed_payload: signedPayload,
     },
   };
-  return { envelope, request, requestEnvelope, result, payload };
+  return { envelope, request, requestEnvelope, result: signedResult, payload };
 }
 
 function verificationFor(input: Awaited<ReturnType<typeof createSignedEnvelope>>) {
@@ -154,6 +157,13 @@ describe("Glyph Connect v4 request initiation", () => {
       amount: "1",
       from: IDENTITY,
     }, { nonce: "transfer-nonce-1234", exp: FUTURE_EXP }));
+    assertMainnetV2Request(createScCallRequest({
+      type: "sc_call",
+      dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
+      contract_index: 0,
+      input_type: 0,
+      amount: "0",
+    }, { nonce: "sc-call-nonce-1234", exp: FUTURE_EXP }));
     assertMainnetV2Request(createSignMessageRequest({
       type: "sign_message",
       dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
@@ -261,6 +271,31 @@ describe("Glyph Connect v4 signed callback verification", () => {
     await expect(verifyCallbackEnvelope(signed.result, verificationFor(signed))).rejects.toThrow(
       "signed Glyph callback envelope",
     );
+  });
+
+  test("rejects a signed callback whose proof key is not bound to its identity", async () => {
+    const signed = await createSignedEnvelope();
+    const tamperedProof = {
+      ...signed.envelope,
+      proof: { ...signed.envelope.proof, identity: "A".repeat(60) },
+    };
+
+    await expect(verifyCallbackEnvelope(tamperedProof, verificationFor(signed))).rejects.toThrow(
+      "Callback envelope signature is invalid",
+    );
+  });
+
+  test("drops capability-shaped support IDs from copied diagnostics", () => {
+    const diagnostic = buildGlyphSafeDiagnostic({
+      requestId: "local-7",
+      requestType: "connect",
+      state: "failed",
+      failureCode: "verification_failed",
+      supportId: "c_very-secret-callback-capability",
+    });
+
+    expect(JSON.parse(diagnostic).support_id).toBeNull();
+    expect(diagnostic).not.toContain("very-secret-callback-capability");
   });
 });
 
