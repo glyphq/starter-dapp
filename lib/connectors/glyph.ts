@@ -1,6 +1,7 @@
 import { identityToPublicKey, k12, verify } from "@qubic.org/crypto";
 import {
   createConnectRequest,
+  createScCallRequest,
   createSignMessageRequest,
   createTransferRequest,
   createVerifyMessageRequest,
@@ -12,6 +13,8 @@ import {
   type GlyphRequest,
   type GlyphCallbackResponse,
   type GlyphEnvelope,
+  type GlyphScCallRequest,
+  type GlyphSignedCallbackEnvelope,
   type GlyphNetworkBinding,
   type GlyphPreparedRelaySession,
   type GlyphRelayErrorCode,
@@ -30,6 +33,7 @@ import type {
   GlyphRelayDiagnosticEvent,
   GlyphRelayDiagnosticSnapshot,
 } from "./glyph-relay-adapter";
+import { getGlyphAppOrigin } from "./glyph-origin";
 
 const STORAGE_KEY = "glyph-starter-account";
 export const GLYPH_REQUEST_STATUS_EVENT = "glyph:request-status";
@@ -86,6 +90,19 @@ export type GlyphSafeDiagnostic = {
   retry_available: boolean;
 };
 
+export type GlyphScCallInput = {
+  /** Contract index defined by the target contract's public ABI. */
+  contractIndex: number;
+  /** Input type defined by the target contract's public ABI. */
+  inputType: number;
+  /** ABI-encoded payload defined by the target contract. Passed through unchanged. */
+  payload?: string;
+  /** Optional mainnet amount, represented as a decimal integer string. */
+  amount?: string;
+  /** Optional wallet tick offset. */
+  tickOffset?: number;
+};
+
 const permissions: GlyphPermission[] = ["transfer", "sign_message"];
 // Keep recovery long enough to cover normal callback persistence latency while
 // bounding a missing callback to a short, retryable failure. Twelve quick
@@ -98,6 +115,7 @@ const GLYPH_RELAY_RECOVERY_TIMEOUT_MS = 3_500;
 const listeners = new Map<WalletConnectorEvent, Set<(...args: unknown[]) => void>>();
 let preparedRelaySession: GlyphPreparedRelaySession | null = null;
 let relaySessionPreparation: Promise<GlyphPreparedRelaySession> | null = null;
+let relaySessionReadiness: Promise<void> | null = null;
 let localRequestSequence = 0;
 
 /** Runtime binding for the published Connect 4.1.0 API, kept behind the seam. */
@@ -135,21 +153,28 @@ type GlyphRequestExecution = {
 const REQUEST_NOT_READY_MESSAGE =
   "Glyph Wallet is preparing a secure relay session. Wait until it is ready, then try again.";
 
-function appOrigin() {
-  return process.env.NEXT_PUBLIC_APP_ORIGIN ?? "https://starter.glyphq.org";
-}
-
 function dapp() {
-  return { name: "Glyph Qubic Starter", origin: appOrigin() };
+  return { name: "Glyph Qubic Starter", origin: getGlyphAppOrigin() };
 }
 
 function emit(event: WalletConnectorEvent, ...args: unknown[]) {
-  listeners.get(event)?.forEach((listener) => listener(...args));
+  listeners.get(event)?.forEach((listener) => {
+    try {
+      listener(...args);
+    } catch {
+      // Connector event subscribers are advisory and must not turn a verified
+      // wallet result into a rejected operation.
+    }
+  });
 }
 
 function emitRequestFeedback(detail: GlyphRequestFeedback) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent<GlyphRequestFeedback>(GLYPH_REQUEST_STATUS_EVENT, { detail }));
+  try {
+    window.dispatchEvent(new CustomEvent<GlyphRequestFeedback>(GLYPH_REQUEST_STATUS_EVENT, { detail }));
+  } catch {
+    // Lifecycle feedback must never break the request or expose a raw error.
+  }
 }
 
 function nextRequestCorrelation(request: GlyphRequest): GlyphRequestCorrelation {
@@ -194,10 +219,22 @@ function safeRelayErrorCode(error: unknown): GlyphRelayErrorCode | undefined {
     : undefined;
 }
 
+function safeSupportId(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (
+    typeof value !== "string" ||
+    !/^[A-Za-z0-9_-]{1,64}$/.test(value) ||
+    value.startsWith("c_") ||
+    value.startsWith("r_")
+  ) {
+    return undefined;
+  }
+  return value;
+}
+
 function safeRelaySupportId(error: unknown): string | null | undefined {
   if (!error || typeof error !== "object") return undefined;
-  const supportId = (error as { supportId?: unknown }).supportId;
-  return typeof supportId === "string" || supportId === null ? supportId : undefined;
+  return safeSupportId((error as { supportId?: unknown }).supportId);
 }
 
 function relayFailureCode(code: GlyphRelayErrorCode | undefined): GlyphFailureCode {
@@ -236,7 +273,7 @@ function relayDiagnosticFields(input: {
   return {
     ...(relayErrorCode ? { relayErrorCode } : {}),
     ...(input.relayMilestone ? { relayMilestone: input.relayMilestone } : {}),
-    ...(input.supportId !== undefined ? { supportId: input.supportId } : {}),
+    ...(input.supportId !== undefined ? { supportId: safeSupportId(input.supportId) } : {}),
     ...(input.pollAttempt !== undefined ? { pollAttempt: input.pollAttempt } : {}),
     ...(input.pollMaxAttempts !== undefined ? { pollMaxAttempts: input.pollMaxAttempts } : {}),
   };
@@ -276,7 +313,12 @@ function classifyFailure(error: unknown): GlyphFailureCode {
 }
 
 function isInterruptedFailure(code: GlyphFailureCode) {
-  return code === "relay_unavailable" || code === "relay_timeout" || code === "relay_closed";
+  return (
+    code === "relay_unavailable" ||
+    code === "relay_timeout" ||
+    code === "relay_closed" ||
+    code === "wallet_rejected"
+  );
 }
 
 function failureMessage(code: GlyphFailureCode) {
@@ -340,7 +382,7 @@ export function buildGlyphSafeDiagnostic(feedback: GlyphRequestFeedback): string
     milestone: feedback.state,
     failure_code: feedback.failureCode ?? null,
     relay_error_code: feedback.relayErrorCode ?? null,
-    support_id: feedback.supportId ?? null,
+    support_id: safeSupportId(feedback.supportId) ?? null,
     poll_attempt: feedback.pollAttempt ?? 0,
     poll_max_attempts: feedback.pollMaxAttempts ?? 0,
     retry_available: isGlyphRequestRetryable(feedback.state),
@@ -461,25 +503,29 @@ function startRelaySessionPreparation(): Promise<GlyphPreparedRelaySession> {
     .finally(() => {
       relaySessionPreparation = null;
     });
+  relaySessionReadiness = relaySessionPreparation.then(() => undefined).finally(() => {
+    relaySessionReadiness = null;
+  });
   return relaySessionPreparation;
 }
 
-export function prewarmGlyphRelaySession(): Promise<GlyphPreparedRelaySession> {
-  if (preparedRelaySession) return Promise.resolve(preparedRelaySession);
-  return relaySessionPreparation ?? startRelaySessionPreparation();
+export function prewarmGlyphRelaySession(): Promise<void> {
+  if (preparedRelaySession) return Promise.resolve();
+  if (!relaySessionReadiness) startRelaySessionPreparation();
+  return relaySessionReadiness ?? Promise.resolve();
 }
 
 /**
  * Recovery-only preparation. A retry intentionally drops any unused local
  * session and registers another one. It never relaunches the old envelope.
  */
-export function prepareFreshGlyphRelaySession(): Promise<GlyphPreparedRelaySession> {
+export function prepareFreshGlyphRelaySession(): Promise<void> {
   preparedRelaySession = null;
-  if (!relaySessionPreparation) return startRelaySessionPreparation();
+  if (!relaySessionPreparation) return startRelaySessionPreparation().then(() => undefined);
   return relaySessionPreparation.then(() => {
     preparedRelaySession = null;
     return startRelaySessionPreparation();
-  });
+  }).then(() => undefined);
 }
 
 /**
@@ -617,11 +663,56 @@ export function createMainnetGlyphEnvelope(request: GlyphRequest, callback: stri
   });
 }
 
-export function verifyWalletCallbackSignature(input: {
+type GlyphCallbackVerifierInput = {
   payload: Uint8Array;
   signature: Uint8Array;
   publicKey: Uint8Array;
-}) {
+  envelope?: GlyphSignedCallbackEnvelope;
+};
+
+function hasValidIdentity(value: unknown): value is Identity {
+  if (typeof value !== "string") return false;
+  try {
+    identityToPublicKey(value as Identity);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function sameBytes(left: Uint8Array, right: Uint8Array) {
+  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
+}
+
+function assertValidIdentity(value: unknown): asserts value is Identity {
+  if (!hasValidIdentity(value)) {
+    throw new Error("Glyph Wallet returned an invalid identity.");
+  }
+}
+
+/**
+ * Verify the signed callback proof and bind its public key to the claimed
+ * Qubic identity. The SDK already checks canonical payloads and request
+ * bindings; this additional check prevents a valid signature from being
+ * paired with a different identity claim.
+ */
+export function verifyWalletCallbackSignature(input: GlyphCallbackVerifierInput) {
+  if (input.envelope) {
+    try {
+      const proofIdentity = input.envelope.proof.identity;
+      if (!hasValidIdentity(proofIdentity)) return false;
+      if (!sameBytes(identityToPublicKey(proofIdentity), input.publicKey)) return false;
+      if (
+        input.envelope.result.status !== "rejected" &&
+        input.envelope.result.identity !== proofIdentity
+      ) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+
   return verify(k12(input.payload, 32), input.signature, input.publicKey);
 }
 
@@ -631,12 +722,23 @@ function saveAccount(account: WalletAccount | null) {
   else localStorage.removeItem(STORAGE_KEY);
 }
 
+function isWalletAccount(value: unknown): value is WalletAccount {
+  if (!value || typeof value !== "object") return false;
+  const account = value as Partial<WalletAccount>;
+  return hasValidIdentity(account.identity) && account.name === "Glyph Wallet";
+}
+
 function readAccount(): WalletAccount | null {
   if (typeof window === "undefined") return null;
   const value = localStorage.getItem(STORAGE_KEY);
   if (!value) return null;
   try {
-    return JSON.parse(value) as WalletAccount;
+    const account: unknown = JSON.parse(value);
+    if (!isWalletAccount(account)) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return account;
   } catch {
     localStorage.removeItem(STORAGE_KEY);
     return null;
@@ -666,8 +768,14 @@ function bytesToBase64(bytes: Uint8Array) {
 }
 
 function base64ToBytes(value: string) {
-  const binary = atob(value);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  try {
+    const binary = atob(value);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    if (bytes.byteLength === 0) throw new Error("empty binary response");
+    return bytes;
+  } catch {
+    throw new Error("Glyph Wallet returned malformed binary response data.");
+  }
 }
 
 function assertSameIdentity(actual: string, expected: string) {
@@ -677,10 +785,43 @@ function assertSameIdentity(actual: string, expected: string) {
 }
 
 function assertPermissionsGranted(granted: GlyphPermission[]) {
-  const missing = permissions.filter((permission) => !granted.includes(permission));
-  if (missing.length) {
-    throw new Error("Glyph Wallet did not grant the requested permissions.");
+  const requested = new Set(permissions);
+  const grantedSet = new Set(granted);
+  if (grantedSet.size !== requested.size || [...grantedSet].some((permission) => !requested.has(permission))) {
+    throw new Error("Glyph Wallet did not grant exactly the requested permissions.");
   }
+}
+
+/**
+ * Build a typed, mainnet-bound smart-contract request for the connected account.
+ *
+ * Connect 4.1.0 validates the numeric bounds and request shape. It does not
+ * define contract ABIs or payload semantics, so this adapter deliberately
+ * accepts those values from the caller and passes `payload` through unchanged.
+ * Construction alone does not open Glyph Wallet.
+ *
+ * Harmless shape-only example, not a request to launch:
+ * ```ts
+ * const example: GlyphScCallInput = { contractIndex: 0, inputType: 0, amount: "0" };
+ * ```
+ */
+function createGlyphScCallRequestForAccount(input: GlyphScCallInput, account: WalletAccount): GlyphScCallRequest {
+  return createScCallRequest({
+    type: "sc_call",
+    dapp: dapp(),
+    from: account.identity,
+    contract_index: input.contractIndex,
+    input_type: input.inputType,
+    ...(input.payload !== undefined ? { payload: input.payload } : {}),
+    ...(input.amount !== undefined ? { amount: input.amount } : {}),
+    ...(input.tickOffset !== undefined ? { tick_offset: input.tickOffset } : {}),
+  });
+}
+
+export function createGlyphScCallRequest(input: GlyphScCallInput): GlyphScCallRequest {
+  const account = readAccount();
+  if (!account) throw new Error("Connect Glyph Wallet before requesting a smart-contract call.");
+  return createGlyphScCallRequestForAccount(input, account);
 }
 
 export async function requestGlyphTransfer(destination: string, amount: string) {
@@ -702,6 +843,27 @@ export async function requestGlyphTransfer(destination: string, amount: string) 
   }
   try {
     assertSameIdentity(result.identity, account.identity);
+    assertValidIdentity(result.identity);
+  } catch {
+    return operationFailure(correlation, "verification_failed");
+  }
+  completeOperation(correlation);
+  return { txId: result.tx_hash, targetTick: result.target_tick };
+}
+
+/** Request one caller-defined smart-contract action through signed Relay v2. */
+export async function requestGlyphScCall(input: GlyphScCallInput) {
+  const account = readAccount();
+  if (!account) throw new Error("Connect Glyph Wallet before requesting a smart-contract call.");
+  const execution = await requestFromGlyph(createGlyphScCallRequestForAccount(input, account));
+  const { result, correlation } = execution;
+  if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
+  if (result.status !== "signed" || result.type !== "sc_call") {
+    return operationFailure(correlation, "invalid_response");
+  }
+  try {
+    assertSameIdentity(result.identity, account.identity);
+    assertValidIdentity(result.identity);
   } catch {
     return operationFailure(correlation, "verification_failed");
   }
@@ -728,6 +890,7 @@ export async function requestGlyphVerification(message: string, signatureHex: st
   }
   try {
     assertSameIdentity(result.identity, account.identity);
+    assertValidIdentity(result.identity);
   } catch {
     return operationFailure(correlation, "verification_failed");
   }
@@ -746,6 +909,7 @@ export const glyphConnector: WalletConnector = {
     if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
     if (result.status !== "connected") return operationFailure(correlation, "invalid_response");
     try {
+      assertValidIdentity(result.identity);
       assertPermissionsGranted(result.permissions);
     } catch {
       return operationFailure(correlation, "verification_failed");
@@ -788,14 +952,21 @@ export const glyphConnector: WalletConnector = {
     if (result.status !== "signed" || result.type !== "sign_message") {
       return operationFailure(correlation, "invalid_response");
     }
+    let signatureBytes: Uint8Array;
     try {
       assertSameIdentity(result.identity, account.identity);
+      assertValidIdentity(result.identity);
     } catch {
       return operationFailure(correlation, "verification_failed");
     }
+    try {
+      signatureBytes = base64ToBytes(result.signature);
+    } catch {
+      return operationFailure(correlation, "invalid_response");
+    }
     completeOperation(correlation);
     return {
-      signatureHex: toHex(base64ToBytes(result.signature)),
+      signatureHex: toHex(signatureBytes),
       digestHex: toHex(k12(new TextEncoder().encode(message), 32)),
     };
   },

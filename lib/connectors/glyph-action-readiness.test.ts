@@ -40,6 +40,7 @@ Object.assign(globalThis, {
 
 mock.module("@glyph-oss/connect", () => ({
   createConnectRequest: (request: Record<string, unknown>) => ({ ...request, nonce: "connect-nonce", exp: 2_000_000_000 }),
+  createScCallRequest: (request: Record<string, unknown>) => ({ ...request, nonce: "sc-call-nonce", exp: 2_000_000_000 }),
   createSignMessageRequest: (request: Record<string, unknown>) => ({ ...request, nonce: "sign-nonce", exp: 2_000_000_000 }),
   createTransferRequest: (request: Record<string, unknown>) => ({ ...request, nonce: "transfer-nonce", exp: 2_000_000_000 }),
   createVerifyMessageRequest: (request: Record<string, unknown>) => ({ ...request, nonce: "verify-nonce", exp: 2_000_000_000 }),
@@ -77,6 +78,16 @@ mock.module("@glyph-oss/connect", () => ({
         target_tick: 123,
       });
     }
+    if (request.type === "sc_call") {
+      return Promise.resolve({
+        status: "signed",
+        type: "sc_call",
+        nonce: "sc-call-nonce",
+        identity,
+        tx_hash: "tx-sc-call-123",
+        target_tick: 456,
+      });
+    }
     return Promise.resolve({
       status: "verified",
       type: "verify_message",
@@ -98,6 +109,7 @@ const {
   glyphConnector,
   isGlyphRelaySessionReady,
   prewarmGlyphRelaySession,
+  requestGlyphScCall,
   requestGlyphTransfer,
   requestGlyphVerification,
 } = await import("./glyph");
@@ -170,5 +182,25 @@ describe("Glyph action relay readiness", () => {
 
     await expect(requestGlyphTransfer(identity, "1")).resolves.toMatchObject({ txId: "tx-action-123" });
     expect(events).toEqual(["prepare", "subscribe:transfer", "launch:transfer"]);
+  });
+
+  test("uses the same typed request path for caller-defined smart-contract calls", async () => {
+    const callIntent = createGlyphRequestIntentHandlers(prewarmGlyphRelaySession);
+    const warming = callIntent.onClick();
+
+    await expect(requestGlyphScCall({
+      contractIndex: 0,
+      inputType: 0,
+      amount: "0",
+    })).rejects.toThrow("preparing a secure relay session");
+    nextPreparation.resolve(preparedSession);
+    await warming;
+
+    await expect(requestGlyphScCall({
+      contractIndex: 0,
+      inputType: 0,
+      amount: "0",
+    })).resolves.toEqual({ txId: "tx-sc-call-123", targetTick: 456 });
+    expect(events).toEqual(["prepare", "subscribe:sc_call", "launch:sc_call"]);
   });
 });

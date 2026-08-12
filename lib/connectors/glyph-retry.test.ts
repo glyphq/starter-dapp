@@ -33,6 +33,7 @@ mock.module("@glyph-oss/connect", () => ({
     nonce: `connect-nonce-${prepareCount + 1}`,
     exp: 2_000_000_000,
   }),
+  createScCallRequest: () => { throw new Error("not used"); },
   createEnvelope: (request: { nonce: string }, options: { callback: string }) => ({
     protocol: "glyph-connect-request/2",
     request,
