@@ -1,72 +1,52 @@
 "use client";
 
-import { useBalance, useWallet } from "@qubic.org/react";
+import { buildQxAddToBidOrderInput } from "@qubic.org/contracts";
 import { identityToPublicKey, isValidIdentityChecksum, k12, verify } from "@qubic.org/crypto";
+import { useWallet } from "@qubic.org/react";
 import Image from "next/image";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
-  CancelCircleIcon,
   CheckmarkCircle02Icon,
   Copy01Icon,
-  DashboardSquare01Icon,
   Logout01Icon,
-  Menu01Icon,
-  MoneySend01Icon,
   Moon02Icon,
   Pen01Icon,
   SecurityCheckIcon,
-  Shield01Icon,
   Sun02Icon,
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { QRCodeSVG } from "qrcode.react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { Toaster } from "@/components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { hasWalletConnectProjectId } from "@/lib/connectors";
 import {
   GLYPH_REQUEST_STATUS_EVENT,
-  buildGlyphSafeDiagnostic,
   createGlyphRequestIntentHandlers,
   glyphRequestMilestoneLabel,
-  isGlyphRequestRetryable,
   isGlyphRelaySessionReady,
-  prewarmGlyphRelaySession,
   prepareFreshGlyphRelaySession,
-  requestGlyphTransfer,
+  prewarmGlyphRelaySession,
+  requestGlyphScCall,
   requestGlyphVerification,
   type GlyphRequestFeedback,
-  type GlyphRequestMilestone,
 } from "@/lib/connectors/glyph";
 
 type Theme = "dark" | "light";
-export type StarterAction = "transfer" | "sign" | "verify";
-export type StarterSection = "overview" | "wallet" | "transfer" | "sign-verify";
-
+type Flow = "connect" | "qx" | "sign-verify";
 type Icon = IconSvgElement;
-export const starterActionRegistry = [
-  { id: "overview", label: "Overview", description: "Active account and quick actions.", icon: DashboardSquare01Icon },
-  { id: "wallet", label: "Wallet", description: "Wallet choices and account state.", icon: Wallet01Icon },
-  { id: "transfer", label: "Transfer", description: "Send QUBIC to an identity.", icon: MoneySend01Icon },
-  { id: "sign-verify", label: "Sign & Verify", description: "Sign messages and check signatures.", icon: SecurityCheckIcon },
-] as const satisfies ReadonlyArray<{ id: StarterSection; label: string; description: string; icon: Icon }>;
+
+export const referenceFlows = [
+  { id: "connect", label: "Connect" },
+  { id: "qx", label: "QX Add to Bid" },
+  { id: "sign-verify", label: "Sign & Verify" },
+] as const satisfies ReadonlyArray<{ id: Flow; label: string }>;
 
 const THEME_STORAGE_KEY = "qubic-starter-theme";
 const THEME_CHANGE_EVENT = "qubic-starter-theme-change";
@@ -99,17 +79,14 @@ function connectorAvailable(connector: { isAvailable: () => boolean }) {
 }
 
 function shortIdentity(identity: string) {
-  return `${identity.slice(0, 10)}…${identity.slice(-10)}`;
+  return `${identity.slice(0, 8)}…${identity.slice(-8)}`;
 }
 
-const localErrors = new Set([
-  "Enter a complete hexadecimal signature.",
-  "Enter a valid Qubic destination identity.",
-  "Enter a positive whole-number amount.",
-]);
-
-function safeErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error && localErrors.has(error.message) ? error.message : fallback;
+function connectorLabel(id: string) {
+  if (id === "glyph-wallet") return "Glyph Wallet";
+  if (id === "qubic-extension") return "Qubic Extension";
+  if (id === "walletconnect") return "WalletConnect";
+  return id;
 }
 
 function hexToBytes(value: string) {
@@ -120,165 +97,155 @@ function hexToBytes(value: string) {
   return Uint8Array.from(normalized.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
 }
 
+function bytesToBase64(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function safeErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && [
+    "Enter a complete hexadecimal signature.",
+    "Enter a valid Qubic identity.",
+    "Enter a message to sign.",
+  ].includes(error.message)) {
+    return error.message;
+  }
+  return fallback;
+}
+
 function LoadingIcon() {
   return <span className="spinner" aria-hidden="true" />;
 }
 
-function glyphRequestDescription(feedback: GlyphRequestFeedback) {
-  switch (feedback.state) {
-    case "opening": return "Opening wallet.";
-    case "awaiting_approval": return "Approve in your wallet.";
-    case "recovering": return feedback.pollAttempt && feedback.pollMaxAttempts ? `Recovering result · ${feedback.pollAttempt}/${feedback.pollMaxAttempts}` : "Recovering result.";
-    case "verifying": return "Checking wallet response.";
-    case "completed": return "Wallet response verified.";
-    case "interrupted": return "Request interrupted. Try again.";
-    case "failed": return "Request failed. Try again.";
-    case "preparing": return "Preparing secure wallet session.";
+function ConnectorMark({ connectorId }: { connectorId: string }) {
+  if (connectorId === "glyph-wallet") {
+    return <Image className="glyph-mark connector-mark" src="/brand/glyph-mark.png" alt="" width={20} height={20} unoptimized />;
   }
+  return <HugeIcon icon={Wallet01Icon} />;
 }
 
-function PanelHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
-  return (
-    <div className="panel-heading">
-      <div>
-        <p className="panel-eyebrow">{eyebrow}</p>
-        <h2>{title}</h2>
-        <p className="panel-description">{description}</p>
-      </div>
-    </div>
-  );
-}
-
-export function GlyphRequestLifecycle({
-  feedback,
-  preparing,
-  onRetry,
-  onCopyDiagnostic,
-  diagnosticCopied,
+function AccountMenu({
+  identity,
+  connector,
+  copied,
+  onCopy,
+  onDisconnect,
+  disabled,
 }: {
-  feedback: GlyphRequestFeedback | null;
-  preparing: boolean;
-  onRetry: () => void;
-  onCopyDiagnostic: () => void;
-  diagnosticCopied: boolean;
+  identity: string;
+  connector: string;
+  copied: boolean;
+  onCopy: () => void;
+  onDisconnect: () => void;
+  disabled: boolean;
 }) {
-  const state: GlyphRequestMilestone = preparing ? "preparing" : feedback?.state ?? "preparing";
-  const retryable = feedback ? isGlyphRequestRetryable(feedback.state) : false;
-  const description = preparing
-    ? "Preparing secure wallet session."
-    : feedback ? glyphRequestDescription(feedback) : "";
-  return (
-    <div className="request-status-slot">
-      {(feedback || preparing) && (
-        <div className={`request-status request-status-${state}`} role="status" aria-live="polite">
-          <span className="request-status-icon">
-            {state === "completed" ? <HugeIcon icon={CheckmarkCircle02Icon} /> : state === "failed" || state === "interrupted" ? <HugeIcon icon={CancelCircleIcon} /> : <LoadingIcon />}
-          </span>
-          <span className="request-status-copy">
-            <strong>{glyphRequestMilestoneLabel(state)}</strong>
-            <span>{description}</span>
-            {!preparing && feedback?.supportId && <small>Support ID <code>{feedback.supportId}</code></small>}
-          </span>
-          {retryable && feedback && (
-            <span className="request-status-actions">
-              <Button variant="ghost" size="sm" type="button" onClick={onRetry} disabled={preparing}>Retry</Button>
-              <Button variant="ghost" size="sm" type="button" onClick={onCopyDiagnostic}>{diagnosticCopied ? "Copied" : "Diagnostic"}</Button>
-            </span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function StarterActionTabs({ activeAction, onChange }: { activeAction: StarterAction; onChange: (action: StarterAction) => void }) {
-  return (
-    <Tabs value={activeAction} onValueChange={(value) => onChange(value as StarterAction)}>
-      <TabsList variant="line" aria-label="Wallet actions">
-        <TabsTrigger value="transfer"><HugeIcon icon={MoneySend01Icon} />Transfer</TabsTrigger>
-        <TabsTrigger value="sign"><HugeIcon icon={Pen01Icon} />Sign</TabsTrigger>
-        <TabsTrigger value="verify"><HugeIcon icon={Shield01Icon} />Verify</TabsTrigger>
-      </TabsList>
-    </Tabs>
-  );
-}
-
-function AccountMenu({ identity, copied, onCopy, onDisconnect, disabled }: { identity: string; copied: boolean; onCopy: () => void; onDisconnect: () => void; disabled: boolean }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="account-trigger" aria-label="Open account menu" />}>
+      <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="identity-trigger" aria-label="Open connected identity menu" />}>
+        <span className="status-dot online" aria-hidden="true" />
         <code title={identity}>{shortIdentity(identity)}</code>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onCopy}><HugeIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} />{copied ? "Copied" : "Copy identity"}</DropdownMenuItem>
-        <DropdownMenuItem onClick={onDisconnect} disabled={disabled}><HugeIcon icon={Logout01Icon} />Disconnect</DropdownMenuItem>
+      <DropdownMenuContent align="end" className="identity-menu">
+        <DropdownMenuLabel>Connected identity</DropdownMenuLabel>
+        <div className="identity-menu-details">
+          <code>{identity}</code>
+          <span>Using {connectorLabel(connector)}</span>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onCopy}>
+          <HugeIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} />
+          {copied ? "Copied identity" : "Copy identity"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onDisconnect} disabled={disabled} variant="destructive">
+          <HugeIcon icon={Logout01Icon} />
+          Disconnect
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-function ConnectorMark({ connectorId }: { connectorId: string }) {
-  if (connectorId === "glyph-wallet") {
-    return <Image className="connector-logo glyph-logo" src="/brand/glyph-mark.png" alt="" width={22} height={22} unoptimized />;
-  }
-  return <HugeIcon icon={Wallet01Icon} />;
-}
-
-function WalletBalance({ identity }: { identity: string }) {
-  const balance = useBalance(identity, { staleTime: 30_000, retry: 1 });
+function FlowHeading({ id, eyebrow, title, description }: { id: string; eyebrow: string; title: string; description: string }) {
   return (
-    <div className="balance-row" aria-live="polite">
-      <div>
-        <span className="data-label">QU balance</span>
-        {balance.isLoading ? <Skeleton className="balance-skeleton" /> : balance.isError ? <strong className="balance-unavailable">Unavailable</strong> : <strong className="balance-value">{balance.data ? `${balance.data.balance.toLocaleString()} QU` : "Unavailable"}</strong>}
-      </div>
-      {balance.data ? <small>Tick {balance.data.validForTick.toLocaleString()}</small> : balance.isError ? <Button variant="ghost" size="sm" type="button" onClick={() => void balance.refetch()}>Retry</Button> : null}
+    <div className="flow-heading">
+      <p className="eyebrow">{eyebrow}</p>
+      <h2 id={id}>{title}</h2>
+      <p>{description}</p>
     </div>
   );
 }
 
-function ShellToggle() {
-  const { toggleSidebar } = useSidebar();
+function WalletChoice({
+  connector,
+  pendingId,
+  onConnect,
+}: {
+  connector: { id: string };
+  pendingId: string | null;
+  onConnect: (id: string) => void;
+}) {
+  const pending = pendingId === connector.id;
   return (
-    <Tooltip>
-      <TooltipTrigger render={<Button variant="ghost" size="icon" className="shell-toggle" type="button" onClick={toggleSidebar} aria-label="Toggle navigation" />}>
-        <HugeIcon icon={Menu01Icon} />
-      </TooltipTrigger>
-      <TooltipContent>Toggle navigation</TooltipContent>
-    </Tooltip>
+    <Button variant="outline" className="connector-choice" onClick={() => onConnect(connector.id)} disabled={Boolean(pendingId)}>
+      <span className="connector-choice-mark"><ConnectorMark connectorId={connector.id} /></span>
+      <span className="connector-choice-copy">
+        <strong>{connectorLabel(connector.id)}</strong>
+        <small>{connector.id === "glyph-wallet" ? "Secure Glyph relay" : "Browser wallet connector"}</small>
+      </span>
+      {pending ? <LoadingIcon /> : null}
+    </Button>
+  );
+}
+
+function RequestStatus({ feedback, preparing }: { feedback: GlyphRequestFeedback | null; preparing: boolean }) {
+  const state = preparing ? "preparing" : feedback?.state;
+  if (!state || state === "completed" || state === "failed" || state === "interrupted") return null;
+  return (
+    <div className="request-status" role="status" aria-live="polite">
+      <span className="request-status-icon"><LoadingIcon /></span>
+      <span>
+        <strong>{glyphRequestMilestoneLabel(state)}</strong>
+        <small>{state === "awaiting_approval" ? "Approve the request in your wallet." : "Secure wallet request in progress."}</small>
+      </span>
+    </div>
   );
 }
 
 export function StarterApp() {
   const wallet = useWallet();
-  const [section, setSection] = useState<StarterSection>("overview");
   const theme = useSyncExternalStore<Theme>(subscribeToTheme, readStoredTheme, () => "dark");
+  const [flow, setFlow] = useState<Flow>("connect");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [pairingUri, setPairingUri] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [glyphFeedback, setGlyphFeedback] = useState<GlyphRequestFeedback | null>(null);
   const [glyphRelayPreparing, setGlyphRelayPreparing] = useState(false);
-  const [glyphDiagnosticCopied, setGlyphDiagnosticCopied] = useState(false);
-  const [copiedValue, setCopiedValue] = useState<string | null>(null);
-  const [activeSignTab, setActiveSignTab] = useState<"sign" | "verify">("sign");
+  const [copiedIdentity, setCopiedIdentity] = useState(false);
   const [message, setMessage] = useState("Hello from Qubic.");
   const [verifySignature, setVerifySignature] = useState("");
   const [signature, setSignature] = useState<string | null>(null);
   const [verificationResult, setVerificationResult] = useState<boolean | null>(null);
-  const [destination, setDestination] = useState("");
-  const [amount, setAmount] = useState("");
-  const [transferResult, setTransferResult] = useState<string | null>(null);
+  const [activeSignTab, setActiveSignTab] = useState<"sign" | "verify">("sign");
+  const [qxIssuer, setQxIssuer] = useState("");
+  const [qxAssetName, setQxAssetName] = useState("0");
+  const [qxPrice, setQxPrice] = useState("1");
+  const [qxShares, setQxShares] = useState("1");
+  const [qxAmount, setQxAmount] = useState("1");
   const [isBusy, setIsBusy] = useState(false);
-  const [copiedIdentity, setCopiedIdentity] = useState(false);
-  const freshRetrySessionReady = useRef(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   useEffect(() => {
-    const onStatus = (event: Event) => setGlyphFeedback((event as CustomEvent<GlyphRequestFeedback>).detail);
+    const onStatus = (event: Event) => {
+      const detail = (event as CustomEvent<GlyphRequestFeedback>).detail;
+      if (detail.state === "completed") {
+        setGlyphFeedback(null);
+        return;
+      }
+      setGlyphFeedback(detail);
+    };
     window.addEventListener(GLYPH_REQUEST_STATUS_EVENT, onStatus);
     return () => window.removeEventListener(GLYPH_REQUEST_STATUS_EVENT, onStatus);
   }, []);
@@ -301,13 +268,19 @@ export function StarterApp() {
       })
       .catch(() => {
         setGlyphRelayPreparing(false);
-        setActionError("Wallet session preparation failed. Try again.");
+        setActionError("The secure Glyph session could not be prepared. Try again.");
+        toast.error("Wallet session preparation failed", { description: "Try the wallet request again." });
       });
   }, [glyphRelayPreparing]);
 
   const glyphIntentHandlers = useMemo(() => {
     const handlers = createGlyphRequestIntentHandlers(() => prepareGlyphRelayForIntent());
-    return { onPointerEnter: () => handlers.onPointerEnter(), onFocus: () => handlers.onFocus(), onTouchStart: () => handlers.onTouchStart(), onClick: () => handlers.onClick() };
+    return {
+      onPointerEnter: () => handlers.onPointerEnter(),
+      onFocus: () => handlers.onFocus(),
+      onTouchStart: () => handlers.onTouchStart(),
+      onClick: () => handlers.onClick(),
+    };
   }, [prepareGlyphRelayForIntent]);
 
   function openConnectorModal() {
@@ -327,10 +300,10 @@ export function StarterApp() {
     try {
       await wallet.connect(connectorId, { onUri: setPairingUri });
       setDialogOpen(false);
-      toast.success("Wallet ready");
+      toast.success("Wallet connected");
     } catch {
-      setActionError("The wallet could not be selected. Try again.");
-      toast.error("Wallet selection failed", { description: "Try the wallet request again." });
+      setActionError("The wallet could not be connected. Try again.");
+      toast.error("Wallet connection failed", { description: "Try the request again." });
     } finally {
       setPendingId(null);
     }
@@ -342,7 +315,6 @@ export function StarterApp() {
     try {
       await wallet.disconnect();
       setSignature(null);
-      setTransferResult(null);
       setVerificationResult(null);
       toast.success("Wallet disconnected");
     } catch {
@@ -353,9 +325,26 @@ export function StarterApp() {
     }
   }
 
-  async function signMessage(freshRetry = false) {
-    if (wallet.activeConnector?.id === "glyph-wallet" && (freshRetry || !isGlyphRelaySessionReady())) {
-      prepareGlyphRelayForIntent(freshRetry);
+  async function copyIdentity() {
+    if (!wallet.account) return;
+    try {
+      await navigator.clipboard.writeText(wallet.account.identity);
+      setCopiedIdentity(true);
+      window.setTimeout(() => setCopiedIdentity(false), 1800);
+      toast.success("Identity copied");
+    } catch {
+      toast.error("Copy failed", { description: "Try again." });
+    }
+  }
+
+  async function signMessage() {
+    if (!wallet.account || !wallet.activeConnector) return;
+    if (wallet.activeConnector.id === "glyph-wallet" && !isGlyphRelaySessionReady()) {
+      prepareGlyphRelayForIntent();
+      return;
+    }
+    if (!message.trim()) {
+      setActionError("Enter a message to sign.");
       return;
     }
     setIsBusy(true);
@@ -373,48 +362,21 @@ export function StarterApp() {
     }
   }
 
-  async function sendTransfer(freshRetry = false) {
-    if (!wallet.activeConnector) return;
-    if (wallet.activeConnector.id === "glyph-wallet" && (freshRetry || !isGlyphRelaySessionReady())) {
-      prepareGlyphRelayForIntent(freshRetry);
-      return;
-    }
-    setIsBusy(true);
-    setActionError(null);
-    setTransferResult(null);
-    try {
-      if (!isValidIdentityChecksum(destination.trim())) throw new Error("Enter a valid Qubic destination identity.");
-      if (!/^\d+$/.test(amount.trim()) || BigInt(amount.trim()) <= BigInt(0)) throw new Error("Enter a positive whole-number amount.");
-      const result = wallet.activeConnector.id === "glyph-wallet"
-        ? await requestGlyphTransfer(destination.trim(), amount.trim())
-        : await wallet.sendTransaction({ destination: destination.trim(), amount: amount.trim() });
-      setTransferResult(result.txId);
-      toast.success("Transfer submitted");
-    } catch (error) {
-      setActionError(safeErrorMessage(error, "The transfer could not be completed. Check the inputs."));
-      toast.error("Transfer failed", { description: "Check the inputs and try again." });
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function verifyMessageSignature(freshRetry = false) {
+  async function verifyMessageSignature() {
     if (!wallet.account || !wallet.activeConnector) return;
-    if (wallet.activeConnector.id === "glyph-wallet" && (freshRetry || !isGlyphRelaySessionReady())) {
-      prepareGlyphRelayForIntent(freshRetry);
+    if (wallet.activeConnector.id === "glyph-wallet" && !isGlyphRelaySessionReady()) {
+      prepareGlyphRelayForIntent();
       return;
     }
     setIsBusy(true);
     setActionError(null);
     setVerificationResult(null);
     try {
-      if (wallet.activeConnector.id === "glyph-wallet") {
-        setVerificationResult(await requestGlyphVerification(message, verifySignature));
-      } else {
-        const publicKey = identityToPublicKey(wallet.account.identity);
-        setVerificationResult(verify(k12(new TextEncoder().encode(message), 32), hexToBytes(verifySignature), publicKey));
-      }
-      toast.success("Signature checked");
+      const result = wallet.activeConnector.id === "glyph-wallet"
+        ? await requestGlyphVerification(message, verifySignature)
+        : verify(k12(new TextEncoder().encode(message), 32), hexToBytes(verifySignature), identityToPublicKey(wallet.account.identity));
+      setVerificationResult(result);
+      toast.success(result ? "Signature verified" : "Signature is not valid");
     } catch (error) {
       setActionError(safeErrorMessage(error, "The signature could not be verified. Check the inputs."));
       toast.error("Verification failed", { description: "Check the inputs and try again." });
@@ -423,184 +385,204 @@ export function StarterApp() {
     }
   }
 
-  async function copyOutput(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedValue(value);
-      window.setTimeout(() => setCopiedValue(null), 1800);
-      toast.success("Copied");
-    } catch {
-      setActionError("Could not copy the output. Try again.");
-      toast.error("Copy failed", { description: "Try again." });
-    }
-  }
-
-  async function copyIdentity() {
-    if (!wallet.account) return;
-    await copyOutput(wallet.account.identity);
-    setCopiedIdentity(true);
-    window.setTimeout(() => setCopiedIdentity(false), 1800);
-  }
-
-  function retryGlyphRequest() {
-    const requestType = glyphFeedback?.requestType;
-    if (!glyphFeedback || !isGlyphRequestRetryable(glyphFeedback.state)) return;
-    if (!freshRetrySessionReady.current) {
-      prepareGlyphRelayForIntent(true, () => { freshRetrySessionReady.current = true; });
+  async function submitQxAddToBid() {
+    if (wallet.activeConnector?.id !== "glyph-wallet") {
+      setActionError("Connect Glyph Wallet to request this smart-contract call.");
       return;
     }
-    freshRetrySessionReady.current = false;
-    if (requestType === "connect") void connect("glyph-wallet");
-    if (requestType === "transfer") void sendTransfer();
-    if (requestType === "sign_message") void signMessage();
-    if (requestType === "verify_message") void verifyMessageSignature();
-  }
-
-  async function copyGlyphDiagnostic() {
-    if (!glyphFeedback) return;
+    if (!isValidIdentityChecksum(qxIssuer.trim())) {
+      setActionError("Enter a valid asset issuer identity.");
+      return;
+    }
+    if (![qxAssetName, qxPrice, qxShares, qxAmount].every((value) => /^\d+$/.test(value.trim()))) {
+      setActionError("Use non-negative whole numbers for the QX inputs.");
+      return;
+    }
+    if (!isGlyphRelaySessionReady()) {
+      prepareGlyphRelayForIntent();
+      return;
+    }
+    setIsBusy(true);
+    setActionError(null);
     try {
-      await navigator.clipboard.writeText(buildGlyphSafeDiagnostic(glyphFeedback));
-      setGlyphDiagnosticCopied(true);
-      window.setTimeout(() => setGlyphDiagnosticCopied(false), 1800);
-      toast.success("Diagnostic copied");
+      const call = buildQxAddToBidOrderInput(
+        {
+          issuer: qxIssuer.trim(),
+          assetName: BigInt(qxAssetName.trim()),
+          price: BigInt(qxPrice.trim()),
+          numberOfShares: BigInt(qxShares.trim()),
+        },
+        (identity) => identityToPublicKey(identity as Parameters<typeof identityToPublicKey>[0]),
+      );
+      await requestGlyphScCall({
+        contractIndex: call.contractIndex,
+        inputType: call.inputType,
+        payload: bytesToBase64(call.payload),
+        amount: qxAmount.trim(),
+        tickOffset: 50,
+      });
+      toast.success("QX request approved", {
+        description: "Glyph returned a signed smart-contract request. Chain confirmation is not shown here.",
+      });
     } catch {
-      setActionError("Could not copy the diagnostic. Try again.");
+      setActionError("The QX request was not approved. No chain result is shown.");
+      toast.error("QX request failed", { description: "Review the inputs and try again." });
+    } finally {
+      setIsBusy(false);
     }
   }
 
-  const activeRegistryItem = starterActionRegistry.find((item) => item.id === section) ?? starterActionRegistry[0];
-  const errorMessage = actionError || (wallet.error ? "The wallet request could not be completed. Try again." : null);
   const connected = Boolean(wallet.account && wallet.activeConnector);
   const availableConnectors = wallet.connectors.filter((connector) => connectorAvailable(connector) && !(connector.id === "walletconnect" && !hasWalletConnectProjectId));
+  const errorMessage = actionError || (wallet.error ? "The wallet request could not be completed. Try again." : null);
 
   return (
     <TooltipProvider>
-      <Toaster theme={theme as "dark" | "light"} />
-      <SidebarProvider>
-        <Sidebar collapsible="icon">
-          <SidebarHeader>
-            <div className="sidebar-brand">
-              <Image className="glyph-logo" src="/brand/glyph-mark.png" alt="Glyph" width={22} height={22} priority unoptimized />
-              <div className="sidebar-brand-copy"><strong>Qubic Starter</strong><span>Reference app</span></div>
+      <Toaster theme={theme} />
+      <div className="workspace-shell">
+        <header className="workspace-header">
+          <div className="workspace-brand">
+            <span className="workspace-brand-mark" aria-hidden="true"><HugeIcon icon={SecurityCheckIcon} size={18} /></span>
+            <div>
+              <p className="workspace-kicker">Reference workspace</p>
+              <h1>Wallet flows for Qubic</h1>
             </div>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>Workspace</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {starterActionRegistry.map((item) => (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton isActive={item.id === section} tooltip={item.label} onClick={() => setSection(item.id)}>
-                        <HugeIcon icon={item.icon} /><span>{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarFooter>
-            <div className="sidebar-connection"> <span className={connected ? "status-dot online" : "status-dot"} /> <span>{connected ? "Active" : "No wallet"}</span></div>
-          </SidebarFooter>
-        </Sidebar>
-        <SidebarInset>
-          <div className="starter-shell">
-            <header className="workspace-header">
-              <div className="workspace-header-left"><ShellToggle /><div><h1>{activeRegistryItem.label}</h1></div></div>
-              <div className="workspace-tools">
-                <Tooltip>
-                  <TooltipTrigger render={<Button variant="outline" size="icon" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} />}>
-                    <HugeIcon icon={theme === "dark" ? Sun02Icon : Moon02Icon} />
-                  </TooltipTrigger>
-                  <TooltipContent>{`Switch to ${theme === "dark" ? "light" : "dark"} theme`}</TooltipContent>
-                </Tooltip>
-                {wallet.account ? <AccountMenu identity={wallet.account.identity} copied={copiedIdentity} onCopy={() => void copyIdentity()} onDisconnect={() => void disconnect()} disabled={Boolean(pendingId)} /> : <Button variant="outline" size="sm" onClick={() => { setSection("wallet"); openConnectorModal(); prepareGlyphRelayForIntent(); }}><HugeIcon icon={Wallet01Icon} />Choose wallet</Button>}
-              </div>
-            </header>
-
-            <main className="workspace-main">
-              {section === "overview" && (
-                <section className="route-panel overview-panel" aria-labelledby="overview-title">
-                  <PanelHeading eyebrow="Account" title="Overview" description="Your active wallet at a glance." />
-                  <Separator className="panel-separator" />
-                  {wallet.account ? (
-                    <>
-                      <div className="account-context"><div><span className="data-label">Identity</span><code>{wallet.account.identity}</code></div><div><span className="data-label">Wallet</span><span>{wallet.activeConnector?.id === "glyph-wallet" ? "Glyph Wallet" : wallet.activeConnector?.id ?? "Wallet"}</span></div></div>
-                      <WalletBalance identity={wallet.account.identity} />
-                      <div className="quick-actions"><span className="data-label">Quick actions</span><div className="quick-action-row"><Button variant="outline" onClick={() => setSection("transfer")}><HugeIcon icon={MoneySend01Icon} />Transfer</Button><Button variant="outline" onClick={() => { setActiveSignTab("sign"); setSection("sign-verify"); }}><HugeIcon icon={Pen01Icon} />Sign</Button><Button variant="outline" onClick={() => { setActiveSignTab("verify"); setSection("sign-verify"); }}><HugeIcon icon={Shield01Icon} />Verify</Button></div></div>
-                    </>
-                  ) : (
-                    <div className="empty-state"><HugeIcon icon={Wallet01Icon} /><div><strong>No wallet selected</strong><span>Choose a wallet to use the workspace.</span></div><Button className="primary-button" onClick={() => { setSection("wallet"); openConnectorModal(); prepareGlyphRelayForIntent(); }}><HugeIcon icon={Wallet01Icon} />Choose wallet</Button></div>
-                  )}
-                </section>
-              )}
-
-              {section === "wallet" && (
-                <section className="route-panel" aria-labelledby="wallet-title">
-                  <PanelHeading eyebrow="Account" title="Wallet" description="Manage the active wallet and account." />
-                  <Separator className="panel-separator" />
-                  {wallet.account ? (
-                    <div className="wallet-state"><div className="account-context"><div><span className="data-label">Identity</span><code>{wallet.account.identity}</code></div><div><span className="data-label">Wallet</span><span>{wallet.activeConnector?.id === "glyph-wallet" ? "Glyph Wallet" : wallet.activeConnector?.id ?? "Wallet"}</span></div></div><Button variant="outline" onClick={() => void disconnect()} disabled={Boolean(pendingId)}><HugeIcon icon={Logout01Icon} />Disconnect</Button></div>
-                  ) : (
-                    <div className="empty-state"><HugeIcon icon={Wallet01Icon} /><div><strong>Choose a wallet</strong><span>Only available wallets are shown.</span></div><Button className="primary-button" onClick={() => { openConnectorModal(); prepareGlyphRelayForIntent(); }}><HugeIcon icon={Wallet01Icon} />Choose wallet</Button></div>
-                  )}
-                  <GlyphRequestLifecycle feedback={glyphFeedback} preparing={glyphRelayPreparing} onRetry={retryGlyphRequest} onCopyDiagnostic={() => void copyGlyphDiagnostic()} diagnosticCopied={glyphDiagnosticCopied} />
-                </section>
-              )}
-
-              {section === "transfer" && (
-                <section className="route-panel" aria-labelledby="transfer-title">
-                  <PanelHeading eyebrow="Wallet request" title="Transfer" description="Send QUBIC to a validated identity." />
-                  <Separator className="panel-separator" />
-                  {!wallet.account ? <div className="empty-state"><HugeIcon icon={Wallet01Icon} /><div><strong>Wallet required</strong><span>The transfer request needs an active account.</span></div><Button className="primary-button" onClick={() => { setSection("wallet"); openConnectorModal(); prepareGlyphRelayForIntent(); }}><HugeIcon icon={Wallet01Icon} />Choose wallet</Button></div> : <form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void sendTransfer(); }}><div className="form-grid"><label>Destination<Input aria-label="Destination identity" value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="Qubic identity" autoComplete="off" spellCheck={false} /></label><label>Amount<Input aria-label="Amount in QUBIC" inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Whole-number amount" /></label></div><div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy || !destination.trim() || !amount.trim()}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={MoneySend01Icon} />}{isBusy ? "Waiting for approval" : "Request transfer"}</Button></div>{transferResult && <div className="result-line"><HugeIcon icon={CheckmarkCircle02Icon} /><span>Submitted</span><OutputValue value={transferResult} copied={copiedValue === transferResult} onCopy={() => void copyOutput(transferResult)} /></div>}</form>}
-                  <GlyphRequestLifecycle feedback={glyphFeedback} preparing={glyphRelayPreparing} onRetry={retryGlyphRequest} onCopyDiagnostic={() => void copyGlyphDiagnostic()} diagnosticCopied={glyphDiagnosticCopied} />
-                </section>
-              )}
-
-              {section === "sign-verify" && (
-                <section className="route-panel" aria-labelledby="sign-verify-title">
-                  <PanelHeading eyebrow="Wallet request" title="Sign & Verify" description="Sign a message or verify a signature against the active wallet." />
-                  <Separator className="panel-separator" />
-                  {!wallet.account ? <div className="empty-state"><HugeIcon icon={Wallet01Icon} /><div><strong>Wallet required</strong><span>Signing and verification use the active account.</span></div><Button className="primary-button" onClick={() => { setSection("wallet"); openConnectorModal(); prepareGlyphRelayForIntent(); }}><HugeIcon icon={Wallet01Icon} />Choose wallet</Button></div> : <Tabs value={activeSignTab} onValueChange={(value) => setActiveSignTab(value as "sign" | "verify")}><TabsList variant="line" className="inner-tabs"><TabsTrigger value="sign"><HugeIcon icon={Pen01Icon} />Sign</TabsTrigger><TabsTrigger value="verify"><HugeIcon icon={Shield01Icon} />Verify</TabsTrigger></TabsList><TabsContent value="sign"><form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void signMessage(); }}><div className="task-heading"><div><h3>Sign a message</h3><p>Ask the wallet to sign the text below.</p></div></div><label>Message<Textarea aria-label="Message to sign" value={message} onChange={(event) => setMessage(event.target.value)} rows={4} /></label><Button className="primary-button" type="submit" disabled={isBusy || !message.trim()}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={Pen01Icon} />}{isBusy ? "Waiting for approval" : "Sign message"}</Button>{signature && <div className="result-line"><HugeIcon icon={CheckmarkCircle02Icon} /><span>Signature</span><OutputValue value={signature} copied={copiedValue === signature} onCopy={() => void copyOutput(signature)} /></div>}</form></TabsContent><TabsContent value="verify"><form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void verifyMessageSignature(); }}><div className="task-heading"><div><h3>Verify a signature</h3><p>Check a signature against this account.</p></div></div><label>Message<Textarea aria-label="Message to verify" value={message} onChange={(event) => setMessage(event.target.value)} rows={3} /></label><label>Signature<Textarea aria-label="Signature to verify" value={verifySignature} onChange={(event) => setVerifySignature(event.target.value)} placeholder="Hexadecimal signature" rows={3} spellCheck={false} /></label><Button className="primary-button" type="submit" disabled={isBusy || !message.trim() || !verifySignature.trim()}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={Shield01Icon} />}{isBusy ? "Checking" : "Verify signature"}</Button>{verificationResult !== null && <div className={`result-line ${verificationResult ? "valid" : "invalid"}`}><HugeIcon icon={CheckmarkCircle02Icon} /><span>{verificationResult ? "Signature is valid" : "Signature is not valid"}</span></div>}</form></TabsContent></Tabs>}
-                  <GlyphRequestLifecycle feedback={glyphFeedback} preparing={glyphRelayPreparing} onRetry={retryGlyphRequest} onCopyDiagnostic={() => void copyGlyphDiagnostic()} diagnosticCopied={glyphDiagnosticCopied} />
-                </section>
-              )}
-
-              {errorMessage && !(glyphFeedback && isGlyphRequestRetryable(glyphFeedback.state)) && <p className="error-line" role="alert">{errorMessage}</p>}
-            </main>
           </div>
-        </SidebarInset>
-
-        <Dialog open={dialogOpen} onOpenChange={(open) => { if (!pendingId) setDialogOpen(open); }}>
-          <DialogContent className="connector-dialog-content" showCloseButton={!pendingId}>
-            <DialogHeader><DialogTitle>{pairingUri ? "WalletConnect" : "Choose a wallet"}</DialogTitle><DialogDescription>{pairingUri ? "Scan the code in your wallet app." : "Available wallets"}</DialogDescription></DialogHeader>
-            {pairingUri ? (
-              <div className="pairing-view" role="status">
-                <div className="qr-frame"><QRCodeSVG value={pairingUri} size={148} /></div>
-                <div className="pairing-copy"><strong>Scan to pair</strong><span>Approve in your wallet.</span><Button variant="ghost" size="sm" type="button" onClick={() => { setPairingUri(null); setPendingId(null); setDialogOpen(false); }}>Cancel</Button></div>
-              </div>
+          <div className="workspace-header-actions">
+            <Tooltip>
+              <TooltipTrigger render={<Button variant="ghost" size="icon" type="button" onClick={toggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} />}>
+                <HugeIcon icon={theme === "dark" ? Sun02Icon : Moon02Icon} />
+              </TooltipTrigger>
+              <TooltipContent>{`Switch to ${theme === "dark" ? "light" : "dark"} theme`}</TooltipContent>
+            </Tooltip>
+            {wallet.account && wallet.activeConnector ? (
+              <AccountMenu identity={wallet.account.identity} connector={wallet.activeConnector.id} copied={copiedIdentity} onCopy={() => void copyIdentity()} onDisconnect={() => void disconnect()} disabled={Boolean(pendingId)} />
             ) : (
-              <>
-                {wallet.account && wallet.activeConnector && <div className="dialog-active-state"><span className="connector-icon"><ConnectorMark connectorId={wallet.activeConnector.id} /></span><span><strong>Active</strong><code>{shortIdentity(wallet.account.identity)}</code></span><Button variant="ghost" size="sm" type="button" onClick={() => void disconnect()} disabled={Boolean(pendingId)}>Disconnect</Button></div>}
-                <div className="connector-list">
-                  {availableConnectors.length > 0 ? availableConnectors.map((connector) => {
-                    const label = connector.id === "glyph-wallet" ? "Glyph Wallet" : connector.id === "qubic-extension" ? "Qubic extension" : connector.id === "walletconnect" ? "WalletConnect" : "Wallet";
-                    const active = wallet.activeConnector?.id === connector.id;
-                    return <Button variant="ghost" className="connector-option" data-active={active ? "true" : undefined} disabled={Boolean(pendingId) || active} key={connector.id} {...(connector.id === "glyph-wallet" ? glyphIntentHandlers : {})} onClick={() => void connect(connector.id)} type="button"><span className="connector-icon"><ConnectorMark connectorId={connector.id} /></span><span className="connector-copy"><strong>{label}</strong>{active && <small>Active</small>}</span><span className="option-state">{pendingId === connector.id ? <LoadingIcon /> : active ? <HugeIcon icon={CheckmarkCircle02Icon} /> : <HugeIcon icon={Wallet01Icon} />}</span></Button>;
-                  }) : <div className="dialog-empty">No wallet is available in this environment.</div>}
-                </div>
-              </>
+              <Button variant="outline" size="sm" onClick={() => { setFlow("connect"); openConnectorModal(); prepareGlyphRelayForIntent(); }}>
+                <HugeIcon icon={Wallet01Icon} />
+                Connect wallet
+              </Button>
             )}
-            {pendingId === "glyph-wallet" && <GlyphRequestLifecycle feedback={glyphFeedback} preparing={glyphRelayPreparing} onRetry={retryGlyphRequest} onCopyDiagnostic={() => void copyGlyphDiagnostic()} diagnosticCopied={glyphDiagnosticCopied} />}
-            {actionError && <p className="dialog-error" role="alert">{actionError}</p>}
+          </div>
+        </header>
+
+        <main className="workspace-main">
+          <nav className="flow-nav" aria-label="Reference flows">
+            {referenceFlows.map((item) => (
+              <button key={item.id} type="button" className={`flow-nav-item ${flow === item.id ? "active" : ""}`} onClick={() => setFlow(item.id)} aria-current={flow === item.id ? "page" : undefined}>
+                <span className="flow-nav-index">{item.id === "connect" ? "01" : item.id === "qx" ? "02" : "03"}</span>
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="flow-stage">
+            {flow === "connect" && (
+              <section className="flow-panel" aria-labelledby="connect-title">
+                <FlowHeading id="connect-title" eyebrow="Flow 01" title="Connect" description="Choose a wallet connector and establish an account session." />
+                <div className="flow-rule" />
+                {connected && wallet.account && wallet.activeConnector ? (
+                  <div className="connected-state">
+                    <div className="connected-state-copy">
+                      <span className="status-dot online" aria-hidden="true" />
+                      <div>
+                        <strong>Wallet connected</strong>
+                        <p>{connectorLabel(wallet.activeConnector.id)} is ready for requests.</p>
+                      </div>
+                    </div>
+                    <div className="connected-identity"><span>Identity</span><code>{shortIdentity(wallet.account.identity)}</code></div>
+                  </div>
+                ) : (
+                  <div className="connect-prompt">
+                    <div>
+                      <strong>Start with a wallet</strong>
+                      <p>Only available connectors appear here. Glyph requests use the signed Relay v2 path.</p>
+                    </div>
+                    <Button className="primary-button" onClick={() => { openConnectorModal(); prepareGlyphRelayForIntent(); }}>
+                      <HugeIcon icon={Wallet01Icon} />Choose wallet
+                    </Button>
+                  </div>
+                )}
+                <RequestStatus feedback={glyphFeedback} preparing={glyphRelayPreparing} />
+              </section>
+            )}
+
+            {flow === "qx" && (
+              <section className="flow-panel" aria-labelledby="fees-title">
+                <FlowHeading id="qx-title" eyebrow="Flow 02 · Write request" title="QX Add to Bid" description="Build the authoritative QX AddToBidOrder payload and request Glyph approval." />
+                <div className="flow-rule" />
+                <div className="call-intro">
+                  <div><span className="data-label">Contract</span><code>QX · index 1</code></div>
+                  <div><span className="data-label">Procedure</span><code>AddToBidOrder · input type 6</code></div>
+                </div>
+                <form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void submitQxAddToBid(); }}>
+                  <div className="qx-input-grid">
+                    <label htmlFor="qx-issuer">Asset issuer identity<Input id="qx-issuer" value={qxIssuer} onChange={(event) => setQxIssuer(event.target.value)} placeholder="60-character Qubic identity" autoComplete="off" spellCheck={false} /></label>
+                    <label htmlFor="qx-asset-name">Asset name (uint64)<Input id="qx-asset-name" inputMode="numeric" value={qxAssetName} onChange={(event) => setQxAssetName(event.target.value)} /></label>
+                    <label htmlFor="qx-price">Bid price (int64)<Input id="qx-price" inputMode="numeric" value={qxPrice} onChange={(event) => setQxPrice(event.target.value)} /></label>
+                    <label htmlFor="qx-shares">Shares (int64)<Input id="qx-shares" inputMode="numeric" value={qxShares} onChange={(event) => setQxShares(event.target.value)} /></label>
+                    <label htmlFor="qx-amount">Call amount (QU)<Input id="qx-amount" inputMode="numeric" value={qxAmount} onChange={(event) => setQxAmount(event.target.value)} /></label>
+                  </div>
+                  <p className="qx-call-note">Defaults are intentionally low: 1 QU, price 1, and 1 share. Review every input in Glyph before approving. This workspace does not broadcast or confirm a chain result.</p>
+                  <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy || wallet.activeConnector?.id !== "glyph-wallet"}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={SecurityCheckIcon} />}{isBusy ? "Waiting for approval…" : "Request Glyph approval"}</Button></div>
+                  {wallet.activeConnector?.id !== "glyph-wallet" && <p className="error-line" role="status">Connect Glyph Wallet for this signed smart-contract request.</p>}
+                </form>
+              </section>
+            )}
+
+            {flow === "sign-verify" && (
+              <section className="flow-panel" aria-labelledby="sign-verify-title">
+                <FlowHeading id="sign-verify-title" eyebrow="Flow 03 · Wallet request" title="Sign & Verify" description="Sign a message with the active wallet or verify a signature against its identity." />
+                <div className="flow-rule" />
+                {!connected ? (
+                  <div className="connect-prompt compact-prompt">
+                    <div><strong>Wallet required</strong><p>Connect a wallet before sending a signing request.</p></div>
+                    <Button className="primary-button" onClick={() => { setFlow("connect"); openConnectorModal(); prepareGlyphRelayForIntent(); }}><HugeIcon icon={Wallet01Icon} />Connect wallet</Button>
+                  </div>
+                ) : (
+                  <Tabs value={activeSignTab} onValueChange={(value) => setActiveSignTab(value as "sign" | "verify")}>
+                    <TabsList variant="line" className="inner-tabs" aria-label="Sign and verify actions">
+                      <TabsTrigger value="sign"><HugeIcon icon={Pen01Icon} />Sign</TabsTrigger>
+                      <TabsTrigger value="verify"><HugeIcon icon={SecurityCheckIcon} />Verify</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="sign">
+                      <form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void signMessage(); }}>
+                        <label htmlFor="sign-message">Message<textarea id="sign-message" value={message} onChange={(event) => { setMessage(event.target.value); setSignature(null); }} /></label>
+                        <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={Pen01Icon} />}{isBusy ? "Signing…" : "Sign message"}</Button></div>
+                        {signature && <div className="output-block"><span className="data-label">Signature</span><code>{signature}</code></div>}
+                      </form>
+                    </TabsContent>
+                    <TabsContent value="verify">
+                      <form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void verifyMessageSignature(); }}>
+                        <label htmlFor="verify-message">Message<textarea id="verify-message" value={message} onChange={(event) => { setMessage(event.target.value); setVerificationResult(null); }} /></label>
+                        <label htmlFor="verify-signature">Signature<Input id="verify-signature" value={verifySignature} onChange={(event) => { setVerifySignature(event.target.value); setVerificationResult(null); }} placeholder="Hex signature" autoComplete="off" spellCheck={false} /></label>
+                        <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={SecurityCheckIcon} />}{isBusy ? "Checking…" : "Verify signature"}</Button></div>
+                        {verificationResult !== null && <p className={`result-line ${verificationResult ? "" : "invalid"}`} role="status"><HugeIcon icon={verificationResult ? CheckmarkCircle02Icon : SecurityCheckIcon} />{verificationResult ? "Signature is valid for the connected identity." : "Signature is not valid for the connected identity."}</p>}
+                      </form>
+                    </TabsContent>
+                  </Tabs>
+                )}
+                <RequestStatus feedback={glyphFeedback} preparing={glyphRelayPreparing} />
+              </section>
+            )}
+            {errorMessage && <p className="error-line workspace-error" role="alert">{errorMessage}</p>}
+          </div>
+        </main>
+
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Connect a wallet</DialogTitle>
+              <DialogDescription>Select an available connector to continue.</DialogDescription>
+            </DialogHeader>
+            <div className="connector-list">
+              {availableConnectors.map((connector) => <WalletChoice key={connector.id} connector={connector} pendingId={pendingId} onConnect={(id) => void connect(id)} />)}
+            </div>
+            {pairingUri && <div className="pairing-box"><QRCodeSVG value={pairingUri} size={168} includeMargin bgColor="transparent" fgColor="currentColor" /><p>Scan with your WalletConnect wallet.</p></div>}
+            {actionError && <p className="error-line" role="alert">{actionError}</p>}
           </DialogContent>
         </Dialog>
-      </SidebarProvider>
+      </div>
     </TooltipProvider>
   );
-}
-
-function OutputValue({ value, copied, onCopy }: { value: string; copied: boolean; onCopy: () => void }) {
-  return <span className="output-value"><code title={value}>{value}</code><Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="copy-button" type="button" onClick={onCopy} aria-label={copied ? "Copied" : "Copy output"} />}><HugeIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} /></TooltipTrigger><TooltipContent>{copied ? "Copied" : "Copy output"}</TooltipContent></Tooltip></span>;
 }
