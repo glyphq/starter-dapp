@@ -20,8 +20,10 @@ import {
 } from "@glyph-oss/connect";
 import { generateRandomSeed, k12, publicKeyFromSeed, sign } from "@qubic.org/crypto";
 import {
+  buildGlyphSafeDiagnostic,
   createMainnetGlyphEnvelope,
   GLYPH_MAINNET_NETWORK,
+  isGlyphRequestRetryable,
   verifyWalletCallbackSignature,
 } from "./glyph";
 
@@ -239,5 +241,41 @@ describe("Glyph Connect v4 signed callback verification", () => {
     await expect(verifyCallbackEnvelope(signed.result, verificationFor(signed))).rejects.toThrow(
       "signed Glyph callback envelope",
     );
+  });
+});
+
+describe("Glyph request lifecycle diagnostics", () => {
+  test("keeps correlation local and emits only an allow-listed redacted diagnostic", () => {
+    const feedback = {
+      requestId: "local-42",
+      requestType: "transfer" as const,
+      state: "interrupted" as const,
+      failureCode: "relay_timeout" as const,
+    };
+    const diagnostic = buildGlyphSafeDiagnostic(feedback);
+
+    expect(isGlyphRequestRetryable(feedback.state)).toBe(true);
+    expect(diagnostic).toContain('"schema": "glyph-starter-diagnostic/v1"');
+    expect(diagnostic).toContain('"request_type": "transfer"');
+    expect(diagnostic).toContain('"failure_code": "relay_timeout"');
+    expect(diagnostic).not.toContain(feedback.requestId);
+    for (const forbidden of [
+      "callback",
+      "https://",
+      "signed_payload",
+      "signature",
+      "public_key",
+      "identity",
+      "origin",
+      "message",
+      "amount",
+      "raw error",
+    ]) {
+      expect(diagnostic.toLowerCase()).not.toContain(forbidden);
+    }
+  });
+
+  test("does not offer retry for an accepted request", () => {
+    expect(isGlyphRequestRetryable("completed")).toBe(false);
   });
 });

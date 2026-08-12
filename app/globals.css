@@ -91,6 +91,22 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 .request-feedback { width: min(100%, 500px); margin: 1rem 0 0; padding: .76rem .9rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text-secondary); font-size: .76rem; line-height: 1.45; text-align: center; }
 .request-feedback-completed { border-color: color-mix(in srgb, var(--success) 36%, var(--border-subtle)); color: var(--success); }
 .request-feedback-failed { border-color: color-mix(in srgb, var(--danger) 36%, var(--border-subtle)); color: var(--danger); }
+.request-lifecycle-slot { width: min(100%, 500px); min-height: 90px; margin-top: 1rem; }
+.request-lifecycle { width: 100%; padding: .9rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--surface-1); color: var(--text-secondary); text-align: left; }
+.request-lifecycle-heading { display: flex; align-items: flex-start; gap: .7rem; }
+.request-lifecycle-marker { display: grid; place-items: center; width: 1.05rem; height: 1.05rem; margin-top: .1rem; color: var(--warning); }
+.request-lifecycle-marker svg { width: 1.05rem; height: 1.05rem; }
+.request-lifecycle-heading strong { display: block; color: var(--text-primary); font-size: .78rem; font-weight: 560; }
+.request-lifecycle-heading p { margin: .22rem 0 0; color: var(--text-secondary); font-size: .74rem; line-height: 1.45; }
+.request-lifecycle-opening, .request-lifecycle-awaiting_approval, .request-lifecycle-verifying, .request-lifecycle-preparing { border-color: color-mix(in srgb, var(--warning) 34%, var(--border-subtle)); }
+.request-lifecycle-completed { border-color: color-mix(in srgb, var(--success) 36%, var(--border-subtle)); }
+.request-lifecycle-completed .request-lifecycle-marker { color: var(--success); }
+.request-lifecycle-interrupted, .request-lifecycle-failed { border-color: color-mix(in srgb, var(--danger) 36%, var(--border-subtle)); }
+.request-lifecycle-interrupted .request-lifecycle-marker, .request-lifecycle-failed .request-lifecycle-marker { color: var(--danger); }
+.request-lifecycle-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem .8rem; margin-top: .8rem; padding-top: .75rem; border-top: 1px solid var(--border-subtle); }
+.lifecycle-retry { min-height: 40px; padding: .58rem .8rem; font-size: .74rem; }
+.lifecycle-diagnostic { min-height: 40px; margin: 0; padding: 0 .25rem; font-size: .72rem; }
+.lifecycle-diagnostic svg { width: .95rem; height: .95rem; }
 
 .wallet-actions { width: 100%; display: flex; align-items: center; justify-content: center; gap: .28rem; padding: .28rem; border: 1px solid var(--border-subtle); border-radius: 999px; background: color-mix(in srgb, var(--surface-1) 82%, transparent); box-shadow: var(--shadow-control); }
 .wallet-actions button { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: .45rem; min-height: 42px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--text-tertiary); font-size: .78rem; cursor: pointer; transition: background 160ms var(--ease), color 160ms var(--ease), border-color 160ms var(--ease); }
