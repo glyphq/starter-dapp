@@ -6,15 +6,22 @@ import "@fontsource/geist-mono/400.css";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
+const appOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? "https://starter.glyphq.org";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://starter.glyphq.org"),
-  title: "Glyph Qubic Starter",
-  description: "Connect Qubic wallets through one clear React reference implementation.",
+  metadataBase: new URL(appOrigin),
+  title: {
+    default: "Qubic Starter DApp",
+    template: "%s | Qubic Starter DApp",
+  },
+  applicationName: "Qubic Starter DApp",
+  description: "A minimal Next.js reference for Qubic wallet connectors, account state, transfers, message signing, and signature verification.",
+  keywords: ["Qubic", "dApp", "wallet connectors", "Next.js", "WalletConnect"],
   openGraph: {
-    title: "Glyph Qubic Starter",
-    description: "A multi-wallet reference implementation for Qubic applications.",
+    title: "Qubic Starter DApp",
+    description: "A minimal, reusable wallet connector reference for Qubic applications.",
     url: "/",
-    siteName: "Glyph Qubic Starter",
+    siteName: "Qubic Starter DApp",
     type: "website",
   },
   robots: { index: true, follow: true },
