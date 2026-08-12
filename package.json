@@ -19,6 +19,7 @@
     "@hugeicons/core-free-icons": "^4.2.3",
     "@hugeicons/react": "^1.1.9",
     "@qubic.org/crypto": "1.0.0",
+    "@qubic.org/contracts": "1.0.1",
     "@qubic.org/react": "1.0.0",
     "@qubic.org/rpc": "1.0.0",
     "@qubic.org/types": "1.0.0",

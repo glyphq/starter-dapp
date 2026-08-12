@@ -9,8 +9,8 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Qubic Starter",
-  description: "A minimal wallet workbench for Qubic apps.",
+  title: "Wallet flows",
+  description: "A concise Qubic workspace for wallet, QX, and signed message flows.",
 };
 
 export default function Home() {
