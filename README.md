@@ -1,188 +1,169 @@
 <div align="center">
 
-# Glyph Qubic Starter
+# Qubic Starter DApp
 
-A multi-wallet reference application for Qubic.
+A minimal, reusable Next.js reference for connecting Qubic wallets.
 
-[Glyph](https://glyphq.org) · [Documentation](https://docs.glyphq.org) · [Qubic](https://qubic.org)
+[Qubic](https://qubic.org) · [Glyph Connect](https://docs.glyphq.org)
 
 </div>
 
-## Overview
+## What this is
 
-Glyph Qubic Starter demonstrates a maintainable wallet connection layer built with
-`@qubic.org/react`. It includes the official Qubic connectors and adds Glyph
-Wallet through `@glyph-oss/connect`.
+This repository is a small, inspectable starting point for a Qubic dApp. It
+keeps the shared wallet wiring in `@qubic.org/react`, registers three connector
+paths, and shows how a page can connect an account, request a transfer, sign a
+message, and verify a signature.
 
-The interface provides:
+The included Glyph Wallet adapter is one example connector, not the product
+boundary of the starter. Its Relay v2 implementation is isolated in
+`lib/connectors/glyph.ts` so it can be kept, replaced, or removed when adapting
+the reference to another application.
 
-- Glyph Wallet desktop deep-link connection
-- Qubic browser extension connection
-- WalletConnect pairing
-- Restored wallet sessions
-- Focused connector selection modal
-- Wallet-approved transfer requests
-- User-approved message signing
-- Local signature verification
-- Responsive light and dark themes
+## Included connector paths
 
-## Connector support
-
-| Connector | Package | Requirement |
+| Connector ID | Package path | Enablement and behavior |
 | --- | --- | --- |
-| Glyph Wallet | `@glyph-oss/connect` | Glyph Wallet desktop application |
-| Qubic browser extension | `@qubic.org/react` | Injected Qubic browser provider |
-| WalletConnect | `@qubic.org/react` | WalletConnect project ID |
+| `qubic-extension` | `extensionConnector` from `@qubic.org/react` | Uses an injected Qubic browser provider. It is unavailable when the provider is not installed or injected. |
+| `walletconnect` | `createWalletConnectConnector` from `@qubic.org/react` | Uses QR pairing and is disabled until `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is configured. |
+| `glyph-wallet` | `glyphConnector` in `lib/connectors/glyph.ts` | Opens the Glyph desktop application through Relay v2. The browser flow needs a public HTTPS origin for deployed use. |
 
-The Glyph integration uses `@glyph-oss/connect@4.1.0` native Glyph Connect v2
-requests for wallet-approved transfers, message signing, and signature
-verification. Every launched request explicitly binds to `qubic:mainnet`.
-Signature values are normalized to the hexadecimal format used by the shared
-Qubic connector API.
+The shared connector surface handles account state, disconnect, transaction
+requests, and message signing. The reference UI also supports signature
+verification. Verification is local against the connected identity for the
+extension and WalletConnect paths; Glyph uses its native verification request.
 
-## Requirements
+Glyph-specific actions are intentionally explicit: connect requests ask for
+`transfer` and `sign_message`, transfer and signing requests are sent through
+`@glyph-oss/connect`, and each request is bound to `qubic:mainnet`. Treat the
+transfer screen as a real wallet approval flow, not a mock transaction.
 
-- Bun 1.3 or newer
-- Node.js 20 or newer
-- A WalletConnect project ID to enable WalletConnect
-- An HTTPS public origin for Glyph dApp metadata
+## Quick start
 
-## Setup
+### Requirements
+
+- Node.js 20 or newer, or Bun 1.3 or newer
+- A browser for the development server
+- A Qubic browser extension, WalletConnect-compatible wallet, or Glyph Wallet
+  desktop application for the corresponding connector path
+
+Install and start the app:
 
 ```bash
 bun install
-cp .env.example .env.local
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). With npm, use `npm ci` and
+the equivalent `npm run` commands.
 
-## Environment
+There is no checked-in `.env.example`. Create `.env.local` only when you need
+optional public configuration:
 
 ```dotenv
-NEXT_PUBLIC_APP_ORIGIN=https://starter.glyphq.org
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=
+# Set this to the canonical HTTPS origin where the built app is hosted.
+# For local-only work, omit it unless you are using an HTTPS tunnel.
+NEXT_PUBLIC_APP_ORIGIN=https://your-public-https-origin.example
+
+# Optional. Enables WalletConnect in the connector chooser.
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
 ```
 
-`NEXT_PUBLIC_APP_ORIGIN` identifies the application to Glyph Wallet and must be
-a credential-free public HTTPS origin with no path, query, or fragment.
+`NEXT_PUBLIC_APP_ORIGIN` is used as the dApp origin in wallet metadata and
+Glyph requests. For a deployed Glyph flow it should be a credential-free,
+canonical HTTPS origin without a path, query, or fragment. The app currently
+falls back to its demo origin when this variable is absent.
 
-Glyph Wallet returns desktop requests through the official Glyph relay v2 flow.
-The app prepares and registers a relay session before launch, passes only the
-prepared callback capability to the wallet, and keeps the read capability in the
-dApp subscription for result validation through `@glyph-oss/connect`.
+Both variables are client-visible configuration. They are not places for
+private keys, API tokens, relay capabilities, callback URLs, or wallet session
+secrets. Keep `.env.local` untracked; environment files are ignored by this
+repository.
 
-## Glyph Connect v4 protocol and callback security
+## Connector behavior and boundaries
 
-Glyph launches only `glyph://v2/request?d=<base64url-envelope>` URLs. The v2
-envelope uses `glyph-connect-request/2`, includes a deterministic
-`sha256:<base64url>` request hash, and explicitly binds the request to
-`qubic:mainnet`. Legacy request links are not supported.
+The wallet remains the approval boundary. This app asks a selected connector
+to perform an action, but it cannot approve a transfer or sign a message on a
+user's behalf. Review the destination, amount, message, and active network in
+the wallet before approving.
 
-Relay results must be signed `glyph-connect-callback-envelope/2` responses. The
-connector requires `@glyph-oss/connect` verification before accepting a result:
+For Glyph Wallet, the adapter prepares a short-lived Relay v2 session before
+launching a desktop deep link. The returned callback is accepted only after
+the SDK and adapter verify the signed response against the expected request
+type, nonce, request hash, dApp identity, callback session, account identity,
+and `qubic:mainnet` binding. Interrupted requests use a bounded recovery
+window and a retry creates a fresh session and request. The app does not
+relaunch an old deep link.
 
-- Qubic SchnorrQ verification over the K12 digest of the canonical signed payload
-- the request nonce and type
-- the prepared envelope's request hash and mainnet binding
-- the raw prepared relay callback URL. `@glyph-oss/connect` canonicalizes only official Relay v2 write capabilities to Wallet's signed fingerprint binding, while preserving strict session and capability matching
+Relay capabilities and signed material stay inside the connector flow. Do not
+log, copy, persist, or send them to analytics or application servers. The
+available safe diagnostic intentionally excludes callback URLs, signed
+payloads, proof fields, identities, origin, user-entered message and amount,
+and raw errors.
 
-Unsigned, tampered, cross-network, or mismatched callback envelopes are rejected.
+The app is a static client export. Browser storage may restore a connector
+account for convenience, but it is not a secret store and it does not replace
+wallet or callback verification. Add a server only for an application-specific
+need, with a separate threat model and server-side secret handling.
 
-## Callback lifecycle and recovery
+## Customize the starter
 
-The Starter UI keeps the last real Glyph request milestone visible instead of
-clearing it after a short timeout: `preparing`, `opening`, `awaiting approval`,
-`verifying`, `completed`, `interrupted`, or `failed`. Correlation IDs are local
-to the browser process. They are never added to a request, envelope, deep-link
-URL, callback, or signed payload, so they cannot change protocol verification.
+Use the existing seams rather than copying wallet-specific behavior into the
+page:
 
-The installed `@glyph-oss/connect@4.1.0` public surface provides
-capability-free `onEvent` and `onSnapshot` lifecycle diagnostics, deterministic
-local `supportId` values, typed safe relay error codes, and bounded recovery
-polling through `/v2/result`. The adapter in
-`lib/connectors/glyph-relay-adapter.ts` keeps those public types explicit without
-unsafe casts. Recovered callbacks use the same strict signed v2 verification as
-SSE callbacks.
+| File | Customization point |
+| --- | --- |
+| `app/page.tsx` | Replace the reference screen with the application's route entry. |
+| `components/StarterApp.tsx` | Change the wallet workspace, forms, and action orchestration. |
+| `components/Providers.tsx` | Configure `QubicProvider`, `WalletProvider`, the live client, and the browser storage key. |
+| `lib/connectors/index.ts` | Register, remove, or configure connector instances. Keep optional configuration client-safe. |
+| `lib/connectors/glyph.ts` | Keep or replace the isolated Glyph Relay v2 adapter and its native transfer/sign/verify requests. |
+| `app/globals.css` | Replace the reference visual system without changing connector behavior. |
+| `app/layout.tsx` | Update fonts and application metadata for the consuming dApp. |
+| `next.config.ts` | Keep or change the static export strategy deliberately. |
 
-The Starter passes an explicit recovery budget of up to 12 `/v2/result`
-attempts at 250 ms intervals, with a 2-second per-request timeout and a
-3.5-second total recovery cap. Connect 4.1 starts that polling only after the
-SSE stream closes, times out, or fails; it does not expose a concurrent
-open-SSE watchdog, so the Starter does not duplicate relay polling or callback
-verification in application code.
-
-Connect 4.1.0 does not expose a safe current-session "continue waiting" or
-reconnect action. The UI therefore lets the SDK finish its bounded recovery
-window, then offers a retry that registers a fresh Relay v2 session and builds a
-fresh request from the current form values. It never relaunches an old deep link
-or reuses a completed session. The launch still occurs only from a fresh
-activating click after prewarm completes.
-
-Failed and interrupted requests offer a safe diagnostic copy action. Its
-allow-listed JSON contains only protocol-level state, request type, network,
-failure classification, and retry availability. It excludes relay
-capabilities and URLs, signed material and proof fields, account identity,
-origin, user-entered message and amount, and raw errors.
-
-WalletConnect remains visible but disabled until a project ID is configured.
+When adding a connector, implement the `WalletConnector` contract and make
+availability explicit. Do not display an unavailable wallet as detected, and
+do not assume that a connector supports an action just because another
+connector does.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `bun run dev` | Start the development server |
-| `bun run typecheck` | Check TypeScript |
-| `bun run lint` | Run ESLint |
-| `bun run test` | Run type checking, linting, and protocol unit tests |
-| `bun run build` | Create the static production export |
-| `bun run qa` | Run responsive Playwright and axe checks |
-
-## Project structure
-
-```text
-app/
-  globals.css          Glyph wallet-inspired interface system
-  layout.tsx           Metadata, fonts, and providers
-  page.tsx             Application entry
-components/
-  Providers.tsx        Qubic and wallet providers
-  StarterApp.tsx       Responsive wallet workspace
-lib/connectors/
-  glyph.ts              Glyph Wallet adapter
-  index.ts              Registered connector set
-scripts/
-  qa.mjs                Browser and accessibility checks
-```
+| `bun run dev` | Start the development server. |
+| `bun run typecheck` | Check TypeScript. |
+| `bun run lint` | Run ESLint. |
+| `bun run test` | Run type checking, linting, and connector protocol tests. |
+| `bun run build` | Create the static production export in `out/`. |
+| `bun run qa` | Run the responsive Playwright and axe checks. |
 
 ## Static deployment
 
-The production build is exported to `out/`. The host must serve the generated
-HTML files from the same public HTTPS origin configured in `NEXT_PUBLIC_APP_ORIGIN`.
+Build and serve the generated files from a public HTTPS origin:
 
 ```bash
 bun run build
 python3 -m http.server 4174 -d out
 ```
 
-## Design system
+For a deployed Glyph flow, the serving origin must match the value configured
+in `NEXT_PUBLIC_APP_ORIGIN`. WalletConnect also uses the configured origin in
+its client metadata.
 
-The app uses the same visual foundation as the Glyph public website:
+## Project map
 
-- Geist and Geist Mono from local packages
-- Monochrome OLED surfaces
-- Warm neutral light mode
-- Linear Solar icons
-- Divider-led hierarchy with shared elevated controls
-- Restrained rounded geometry and no card grids
-- Semantic success, warning, and error states
-- Reduced-motion support
-- WCAG 2.2 AA interaction targets and focus states
+```text
+app/
+  layout.tsx           Metadata, fonts, and providers
+  page.tsx             Application entry
+components/
+  Providers.tsx        Qubic and wallet providers
+  StarterApp.tsx       Reference wallet workspace
+lib/connectors/
+  index.ts             Registered connector set
+  glyph.ts             Isolated Glyph Wallet adapter
+  glyph-relay-adapter.ts  Relay lifecycle seam
+```
 
-See [DESIGN.md](DESIGN.md) and [PRODUCT.md](PRODUCT.md) for implementation
-principles and product constraints.
-
-## Independence
-
-Glyph is an independent community project building software for the Qubic
-network. It is not an official Qubic organization.
+This is independent software built for Qubic. It is not an official Qubic
+organization or a replacement for wallet security review.
