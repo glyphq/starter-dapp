@@ -1,39 +1,26 @@
-# Starter dApp design system
+# Qubic Starter DApp
 
 ## Direction
 
-The interface extends Glyph wallet principles into a focused product UI. It uses calm monochrome surfaces, restrained geometry, quiet technical metadata, and divider-led hierarchy. The workspace avoids card grids so the wallet state, selected action, and connector sheet feel like one shared control surface.
+Qubic Starter is a compact, reusable wallet workspace for Qubic apps. The visible shell has four focused sections: Overview, Wallet, Transfer, and Sign & Verify. Selecting a section swaps one task surface in place without dashboard filler or marketing copy.
 
-## Typography
+Overview shows the active identity, wallet, live QU balance, and three useful next actions. Wallet manages available wallet choices and the active account. Transfer, sign, and verify keep one task per surface and retain the existing secure request handlers.
 
-- Geist for interface and editorial text.
-- Geist Mono for identities, tick values, status labels, and technical metadata.
-- Minimal copy with readable product-interface sizing rather than landing-page display scale.
+## Visual language
 
-## Color
+- Calm monochrome near-black and warm-white themes.
+- Space Grotesk for interface copy and Geist Mono for identities, signatures, transaction IDs, and literal code values.
+- Dense workspace hierarchy with separators, rows, and simple action bars instead of card grids.
+- Generated shadcn Sidebar, Dialog, DropdownMenu, Tabs, Separator, Input, Textarea, Skeleton, Tooltip, Button, and Sonner primitives drive interaction ergonomics.
+- Hugeicons provide navigation, wallet, action, status, and feedback icons. The real Glyph mark is loaded from `public/brand/glyph-mark.png` as a discreet wallet affordance.
+- Theme state persists through `qubic-starter-theme` in local storage and `data-theme` on the document root.
 
-Dark mode is the primary presentation and uses black, near-black surfaces, white text, and neutral gray states. Light mode uses warm white and neutral charcoal. Semantic green, amber, and red are reserved for success, configuration, and error states.
+## Data and states
 
-## Geometry
+The overview balance uses the existing `@qubic.org/react` `useBalance` query backed by the configured Qubic provider. It renders a Skeleton while loading, a compact unavailable state with retry on query failure, and the returned QU balance with its valid tick. No balance, token, history, chart, or network value is fabricated.
 
-- Small controls: 10px radius.
-- Sheets and rails: 16 to 24px radius.
-- Primary controls: minimum 48px height.
-- Layout width: 580px centered wallet workspace with responsive gutters.
+Account identities, transaction IDs, and signatures remain abbreviated or copyable where appropriate. User-facing failures use short safe messages. Raw connector errors, callback URLs, protocol secrets, and support internals are not primary UI copy.
 
-## Interaction
+## Scope
 
-- No page transitions.
-- No button movement or shrink-on-click.
-- Short color and opacity changes only.
-- Loading controls replace their leading icon with a spinner.
-- Keyboard focus is visible on every pressable control and field.
-- Every state remains understandable with reduced motion enabled.
-
-## Iconography
-
-Solar icons only, globally rendered in a linear/outline style. Buttons use one meaningful leading icon. Arrows and generic external-link glyphs are not used as button decoration.
-
-## Responsive behavior
-
-Desktop and mobile use one centered wallet workspace. Connector selection appears in a focused modal, preserving the wallet state as the primary interface.
+The app owns only UI composition, accessible state presentation, and the generated component layer. Existing connector implementations, request handlers, provider configuration, environment policy, and secure prewarm behavior remain unchanged.
