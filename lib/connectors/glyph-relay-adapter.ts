@@ -1,20 +1,25 @@
 import type {
   GlyphCallbackResponse,
   GlyphEnvelope,
+  GlyphRelayErrorCode,
+  GlyphRelayEvent,
   GlyphPreparedRelaySession,
   GlyphRelayOptions,
+  GlyphRelaySafeError,
+  GlyphRelaySnapshot,
   GlyphRequest,
 } from "@glyph-oss/connect";
 
 /**
- * Published @glyph-oss/connect v4.0.1 relay boundary used by the starter.
- *
- * The installed SDK exposes prepare, subscribe, and launch. It does not expose
- * polling, reconnect, or cancellation for a prepared Relay v2 session. Keep
- * those concerns out of this adapter until a published SDK API exists. The
- * app's recovery path therefore prepares a new session and builds a new
- * request instead of trying to reuse or relaunch an old one.
+ * Public lifecycle types from @glyph-oss/connect 4.1.0. These diagnostics are
+ * deliberately capability-free and contain no callback, URL, signed payload,
+ * account, or user-entered request data.
  */
+export type GlyphRelayDiagnosticEvent = GlyphRelayEvent;
+export type GlyphRelayDiagnosticSnapshot = GlyphRelaySnapshot;
+export type GlyphRelaySafeFailure = GlyphRelaySafeError;
+export type GlyphRelaySafeFailureCode = GlyphRelayErrorCode;
+
 export interface GlyphRelayAdapter {
   prepare(): Promise<GlyphPreparedRelaySession>;
   subscribe(

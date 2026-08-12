@@ -34,7 +34,7 @@ The interface provides:
 | Qubic browser extension | `@qubic.org/react` | Injected Qubic browser provider |
 | WalletConnect | `@qubic.org/react` | WalletConnect project ID |
 
-The Glyph integration uses `@glyph-oss/connect@4.0.1` native Glyph Connect v2
+The Glyph integration uses `@glyph-oss/connect@4.1.0` native Glyph Connect v2
 requests for wallet-approved transfers, message signing, and signature
 verification. Every launched request explicitly binds to `qubic:mainnet`.
 Signature values are normalized to the hexadecimal format used by the shared
@@ -97,15 +97,20 @@ clearing it after a short timeout: `preparing`, `opening`, `awaiting approval`,
 to the browser process. They are never added to a request, envelope, deep-link
 URL, callback, or signed payload, so they cannot change protocol verification.
 
-The installed `@glyph-oss/connect@4.0.1` public surface provides
-`prepareRelaySession()`, `subscribeViaRelayV2()`, and `launchGlyphRequest()`.
-It does not provide a published poll, reconnect, or session-cancellation API.
-The typed `GlyphRelayAdapter` seam in `lib/connectors/glyph-relay-adapter.ts`
-keeps that boundary explicit without unsafe casts. Recovery therefore does not
-relaunch an old deep link or reuse a completed session: a user retry registers
-a fresh Relay v2 session and builds a fresh request from the current form
-values. The launch still occurs only from a fresh activating click after
-prewarm completes.
+The installed `@glyph-oss/connect@4.1.0` public surface provides
+capability-free `onEvent` and `onSnapshot` lifecycle diagnostics, deterministic
+local `supportId` values, typed safe relay error codes, and bounded recovery
+polling through `/v2/result`. The adapter in
+`lib/connectors/glyph-relay-adapter.ts` keeps those public types explicit without
+unsafe casts. Recovered callbacks use the same strict signed v2 verification as
+SSE callbacks.
+
+Connect 4.1.0 does not expose a safe current-session "continue waiting" or
+reconnect action. The UI therefore lets the SDK finish its bounded recovery
+window, then offers a retry that registers a fresh Relay v2 session and builds a
+fresh request from the current form values. It never relaunches an old deep link
+or reuses a completed session. The launch still occurs only from a fresh
+activating click after prewarm completes.
 
 Failed and interrupted requests offer a safe diagnostic copy action. Its
 allow-listed JSON contains only protocol-level state, request type, network,
