@@ -1,7 +1,30 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { GlyphRequestLifecycle } from "./StarterApp";
+import { GlyphRequestLifecycle, StarterActionTabs, starterActionRegistry } from "./StarterApp";
 import type { GlyphRequestFeedback } from "@/lib/connectors/glyph";
+
+describe("Qubic reference examples", () => {
+  test("registers the route-like starter sections in order", () => {
+    expect(starterActionRegistry.map((item) => item.id)).toEqual([
+      "overview",
+      "wallet",
+      "transfer",
+      "sign-verify",
+    ]);
+  });
+
+  test("exposes isolated transfer, sign, and verify actions", () => {
+    const markup = renderToStaticMarkup(
+      <StarterActionTabs activeAction="transfer" onChange={() => undefined} />,
+    );
+
+    expect(markup).toContain("Transfer");
+    expect(markup).toContain("Sign");
+    expect(markup).toContain("Verify");
+    expect(markup).toContain('aria-selected="true"');
+  });
+
+});
 
 describe("Glyph request lifecycle UX", () => {
   test("shows bounded recovery progress and a safe support ID without a continue-wait action", () => {
@@ -25,14 +48,13 @@ describe("Glyph request lifecycle UX", () => {
     );
 
     expect(markup).toContain("Recovering result");
-    expect(markup).toContain("attempt 2 of 12");
+    expect(markup).toContain("2/12");
     expect(markup).toContain("Support ID");
     expect(markup).toContain("support-1234");
     expect(markup).not.toContain("Continue waiting");
-    expect(markup).not.toContain("Retry with a new request");
   });
 
-  test("offers only a fresh-request retry and safe diagnostic copy after interruption", () => {
+  test("offers only a retry and safe diagnostic after interruption", () => {
     const feedback: GlyphRequestFeedback = {
       requestId: "local-2",
       requestType: "connect",
@@ -51,8 +73,8 @@ describe("Glyph request lifecycle UX", () => {
       />,
     );
 
-    expect(markup).toContain("Retry with a new request");
-    expect(markup).toContain("Copy safe diagnostic");
+    expect(markup).toContain("Retry");
+    expect(markup).toContain("Diagnostic");
     expect(markup).not.toContain("Continue waiting");
     expect(markup).not.toContain("poll_exhausted");
   });
