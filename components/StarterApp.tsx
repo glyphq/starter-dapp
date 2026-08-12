@@ -31,12 +31,18 @@ import {
 import { hasWalletConnectProjectId } from "@/lib/connectors";
 import {
   GLYPH_REQUEST_STATUS_EVENT,
+  buildGlyphSafeDiagnostic,
   createGlyphRequestIntentHandlers,
+  glyphFailureMessage,
+  glyphRequestMilestoneLabel,
+  isGlyphRequestRetryable,
   isGlyphRelaySessionReady,
   prewarmGlyphRelaySession,
+  prepareFreshGlyphRelaySession,
   requestGlyphTransfer,
   requestGlyphVerification,
   type GlyphRequestFeedback,
+  type GlyphRequestMilestone,
 } from "@/lib/connectors/glyph";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -94,6 +100,66 @@ function LoadingIcon() {
   return <span className="spinner" aria-hidden="true" />;
 }
 
+function glyphMilestoneDescription(feedback: GlyphRequestFeedback) {
+  switch (feedback.state) {
+    case "opening": return "Opening Glyph Wallet.";
+    case "awaiting_approval": return "Approve or reject this request in Glyph Wallet.";
+    case "verifying": return "Checking the verified callback against this request.";
+    case "completed": return "The wallet response was verified and accepted.";
+    case "interrupted":
+      return feedback.failureCode ? glyphFailureMessage(feedback.failureCode) : "The approval flow ended before a response arrived.";
+    case "failed":
+      return feedback.failureCode ? glyphFailureMessage(feedback.failureCode) : "The request was not accepted.";
+    case "preparing": return "Preparing a secure Relay v2 session.";
+  }
+}
+
+function GlyphRequestLifecycle({
+  feedback,
+  preparing,
+  onRetry,
+  onCopyDiagnostic,
+  diagnosticCopied,
+}: {
+  feedback: GlyphRequestFeedback | null;
+  preparing: boolean;
+  onRetry: () => void;
+  onCopyDiagnostic: () => void;
+  diagnosticCopied: boolean;
+}) {
+  const state: GlyphRequestMilestone = preparing ? "preparing" : feedback?.state ?? "preparing";
+  const retryable = feedback ? isGlyphRequestRetryable(feedback.state) : false;
+  return (
+    <div className="request-lifecycle-slot">
+      {(feedback || preparing) && (
+        <div className={`request-lifecycle request-lifecycle-${state}`} role="status" aria-live="polite">
+          <div className="request-lifecycle-heading">
+            <span className="request-lifecycle-marker" aria-hidden="true">
+              {state === "completed" ? <CheckCircle /> : state === "failed" || state === "interrupted" ? <CloseCircle /> : <LoadingIcon />}
+            </span>
+            <div>
+              <strong>{glyphRequestMilestoneLabel(state)}</strong>
+              <p>{preparing ? "Preparing a secure Relay v2 session." : feedback ? glyphMilestoneDescription(feedback) : ""}</p>
+            </div>
+          </div>
+          {retryable && feedback && (
+            <div className="request-lifecycle-actions">
+              <button className="button lifecycle-retry" type="button" onClick={onRetry} disabled={preparing}>
+                <PlugCircle aria-hidden="true" />
+                {preparing ? "Preparing retry" : "Retry with a new request"}
+              </button>
+              <button className="quiet-button lifecycle-diagnostic" type="button" onClick={onCopyDiagnostic}>
+                {diagnosticCopied ? <CheckCircle aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                {diagnosticCopied ? "Diagnostic copied" : "Copy safe diagnostic"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function hexToBytes(value: string) {
   const normalized = value.trim();
   if (!/^[0-9a-fA-F]+$/.test(normalized) || normalized.length % 2 !== 0) {
@@ -125,22 +191,26 @@ export function StarterApp() {
   const [glyphFeedback, setGlyphFeedback] = useState<GlyphRequestFeedback | null>(null);
   const [glyphRelayReady, setGlyphRelayReady] = useState(false);
   const [glyphRelayPreparing, setGlyphRelayPreparing] = useState(false);
+  const [glyphDiagnosticCopied, setGlyphDiagnosticCopied] = useState(false);
+  const activeGlyphRequestId = useRef<string | null>(null);
+  const freshRetrySessionReady = useRef(false);
 
   useEffect(() => {
-    let clearTimer: number | undefined;
     const receiveFeedback = (event: Event) => {
       const feedback = (event as CustomEvent<GlyphRequestFeedback>).detail;
-      setGlyphFeedback(feedback);
-      if (feedback.state === "completed" || feedback.state === "failed") {
-        window.clearTimeout(clearTimer);
-        clearTimer = window.setTimeout(() => setGlyphFeedback(null), 1800);
+      if (feedback.state === "opening") {
+        activeGlyphRequestId.current = feedback.requestId;
+        freshRetrySessionReady.current = false;
+        setGlyphDiagnosticCopied(false);
+      } else if (activeGlyphRequestId.current && activeGlyphRequestId.current !== feedback.requestId) {
+        return;
       }
+      setGlyphFeedback(feedback);
     };
 
     window.addEventListener(GLYPH_REQUEST_STATUS_EVENT, receiveFeedback);
     return () => {
       window.removeEventListener(GLYPH_REQUEST_STATUS_EVENT, receiveFeedback);
-      window.clearTimeout(clearTimer);
     };
   }, []);
 
@@ -149,29 +219,27 @@ export function StarterApp() {
     [wallet.activeConnector],
   );
 
-  const prepareGlyphRelayForIntent = useCallback(() => {
+  const prepareGlyphRelayForIntent = useCallback((fresh = false, onReady?: () => void) => {
     const ready = isGlyphRelaySessionReady();
     setGlyphRelayReady(ready);
-    if (ready) {
+    if (ready && !fresh) {
       setGlyphRelayPreparing(false);
       return;
     }
 
     setGlyphRelayPreparing(true);
+    if (fresh) setGlyphRelayReady(false);
     setActionError(null);
-    void prewarmGlyphRelaySession()
+    void (fresh ? prepareFreshGlyphRelaySession() : prewarmGlyphRelaySession())
       .then(() => {
         setGlyphRelayReady(true);
         setGlyphRelayPreparing(false);
+        onReady?.();
       })
-      .catch((error) => {
+      .catch(() => {
         setGlyphRelayReady(false);
         setGlyphRelayPreparing(false);
-        setActionError(
-          error instanceof Error
-            ? error.message
-            : "Could not prepare a secure Glyph session. Try the request again.",
-        );
+        setActionError(glyphFailureMessage("preparation_failed"));
       });
   }, []);
 
@@ -200,9 +268,9 @@ export function StarterApp() {
     connectButtonRef.current?.focus();
   }
 
-  async function connect(connectorId: string) {
-    if (connectorId === "glyph-wallet" && !isGlyphRelaySessionReady()) {
-      prepareGlyphRelayForIntent();
+  async function connect(connectorId: string, freshRetry = false) {
+    if (connectorId === "glyph-wallet" && (freshRetry || !isGlyphRelaySessionReady())) {
+      prepareGlyphRelayForIntent(freshRetry);
       return;
     }
     setPendingId(connectorId);
@@ -235,9 +303,9 @@ export function StarterApp() {
     }
   }
 
-  async function signMessage() {
-    if (wallet.activeConnector?.id === "glyph-wallet" && !isGlyphRelaySessionReady()) {
-      prepareGlyphRelayForIntent();
+  async function signMessage(freshRetry = false) {
+    if (wallet.activeConnector?.id === "glyph-wallet" && (freshRetry || !isGlyphRelaySessionReady())) {
+      prepareGlyphRelayForIntent(freshRetry);
       return;
     }
     setIsSigning(true);
@@ -253,10 +321,10 @@ export function StarterApp() {
     }
   }
 
-  async function sendTransfer() {
+  async function sendTransfer(freshRetry = false) {
     if (!wallet.activeConnector) return;
-    if (wallet.activeConnector.id === "glyph-wallet" && !isGlyphRelaySessionReady()) {
-      prepareGlyphRelayForIntent();
+    if (wallet.activeConnector.id === "glyph-wallet" && (freshRetry || !isGlyphRelaySessionReady())) {
+      prepareGlyphRelayForIntent(freshRetry);
       return;
     }
     setIsTransferring(true);
@@ -280,10 +348,10 @@ export function StarterApp() {
     }
   }
 
-  async function verifyMessageSignature() {
+  async function verifyMessageSignature(freshRetry = false) {
     if (!wallet.account || !wallet.activeConnector) return;
-    if (wallet.activeConnector.id === "glyph-wallet" && !isGlyphRelaySessionReady()) {
-      prepareGlyphRelayForIntent();
+    if (wallet.activeConnector.id === "glyph-wallet" && (freshRetry || !isGlyphRelaySessionReady())) {
+      prepareGlyphRelayForIntent(freshRetry);
       return;
     }
     setIsVerifying(true);
@@ -311,6 +379,40 @@ export function StarterApp() {
     window.setTimeout(() => setCopied(false), 1800);
   }
 
+  function retryGlyphRequest() {
+    const requestType = glyphFeedback?.requestType;
+    if (!glyphFeedback || !isGlyphRequestRetryable(glyphFeedback.state)) return;
+    setActionError(null);
+    if (!freshRetrySessionReady.current) {
+      prepareGlyphRelayForIntent(true, () => {
+        freshRetrySessionReady.current = true;
+      });
+      return;
+    }
+    freshRetrySessionReady.current = false;
+    if (requestType === "connect") {
+      void connect("glyph-wallet");
+    } else if (requestType === "transfer") {
+      void sendTransfer();
+    } else if (requestType === "sign_message") {
+      void signMessage();
+    } else if (requestType === "verify_message") {
+      void verifyMessageSignature();
+    }
+  }
+
+  async function copyGlyphDiagnostic() {
+    if (!glyphFeedback) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(buildGlyphSafeDiagnostic(glyphFeedback));
+      setGlyphDiagnosticCopied(true);
+      window.setTimeout(() => setGlyphDiagnosticCopied(false), 1800);
+    } catch {
+      setActionError("Could not copy the safe diagnostic. Check clipboard permissions and try again.");
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -333,19 +435,6 @@ export function StarterApp() {
                 <p className="state-label"><CheckCircle aria-hidden="true" /> {activeDetail.label}</p>
                 <h1 id="wallet-state-title">Connected</h1>
               </div>
-              {glyphFeedback && (
-                <p className={`request-feedback request-feedback-${glyphFeedback.state}`} role="status">
-                  {glyphFeedback.state === "opening" && "Opening Glyph Wallet"}
-                  {glyphFeedback.state === "waiting" && "Continue in Glyph Wallet"}
-                  {glyphFeedback.state === "completed" && "Wallet response received"}
-                  {glyphFeedback.state === "failed" && "The wallet request did not complete"}
-                </p>
-              )}
-              {glyphRelayPreparing && (
-                <p className="request-feedback request-feedback-opening" role="status">
-                  Preparing a secure Glyph session. Try the request again when it is ready.
-                </p>
-              )}
               <button className="identity" type="button" onClick={copyIdentity} title={wallet.account.identity}>
                 <Key aria-hidden="true" />
                 <span>{shortIdentity(wallet.account.identity)}</span>
@@ -401,6 +490,14 @@ export function StarterApp() {
                 )}
               </div>
 
+              <GlyphRequestLifecycle
+                feedback={glyphFeedback}
+                preparing={glyphRelayPreparing}
+                onRetry={retryGlyphRequest}
+                onCopyDiagnostic={() => void copyGlyphDiagnostic()}
+                diagnosticCopied={glyphDiagnosticCopied}
+              />
+
               <button className="quiet-button" type="button" onClick={disconnect} disabled={Boolean(pendingId)}>
                 {pendingId ? <LoadingIcon /> : <Logout aria-hidden="true" />}
                 Disconnect wallet
@@ -422,20 +519,27 @@ export function StarterApp() {
                 onFocus={glyphConnectIntentHandlers.onFocus}
                 onTouchStart={glyphConnectIntentHandlers.onTouchStart}
                 onClick={() => {
-                  glyphConnectIntentHandlers.onClick();
                   openConnectorModal();
+                  glyphConnectIntentHandlers.onClick();
                 }}
               >
                 <PlugCircle aria-hidden="true" />
                 Connect wallet
               </button>
+              <GlyphRequestLifecycle
+                feedback={glyphFeedback}
+                preparing={glyphRelayPreparing}
+                onRetry={retryGlyphRequest}
+                onCopyDiagnostic={() => void copyGlyphDiagnostic()}
+                diagnosticCopied={glyphDiagnosticCopied}
+              />
             </>
           )}
 
-          {(actionError || wallet.error) && (
+          {(actionError || wallet.error) && !(glyphFeedback && isGlyphRequestRetryable(glyphFeedback.state)) && (
             <div className="error-message" role="alert">
               <ShieldCheck aria-hidden="true" />
-              <p>{actionError ?? wallet.error?.message}</p>
+              <p>{actionError ?? "The wallet connector reported a failure. Try the request again."}</p>
             </div>
           )}
         </section>
@@ -514,13 +618,14 @@ export function StarterApp() {
             </div>
           )}
 
-          {pendingId === "glyph-wallet" && glyphFeedback && (
-            <p className={`dialog-progress request-feedback-${glyphFeedback.state}`} role="status">
-              {glyphFeedback.state === "opening" && "Opening Glyph Wallet"}
-              {glyphFeedback.state === "waiting" && "Approve or reject the connection in Glyph Wallet."}
-              {glyphFeedback.state === "completed" && "Wallet response received"}
-              {glyphFeedback.state === "failed" && "The wallet request did not complete"}
-            </p>
+          {pendingId === "glyph-wallet" && (
+            <GlyphRequestLifecycle
+              feedback={glyphFeedback}
+              preparing={glyphRelayPreparing}
+              onRetry={retryGlyphRequest}
+              onCopyDiagnostic={() => void copyGlyphDiagnostic()}
+              diagnosticCopied={glyphDiagnosticCopied}
+            />
           )}
 
           {actionError && <p className="dialog-error" role="alert">{actionError}</p>}

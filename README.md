@@ -89,6 +89,30 @@ connector requires `@glyph-oss/connect` verification before accepting a result:
 
 Unsigned, tampered, cross-network, or mismatched callback envelopes are rejected.
 
+## Callback lifecycle and recovery
+
+The Starter UI keeps the last real Glyph request milestone visible instead of
+clearing it after a short timeout: `preparing`, `opening`, `awaiting approval`,
+`verifying`, `completed`, `interrupted`, or `failed`. Correlation IDs are local
+to the browser process. They are never added to a request, envelope, deep-link
+URL, callback, or signed payload, so they cannot change protocol verification.
+
+The installed `@glyph-oss/connect@4.0.1` public surface provides
+`prepareRelaySession()`, `subscribeViaRelayV2()`, and `launchGlyphRequest()`.
+It does not provide a published poll, reconnect, or session-cancellation API.
+The typed `GlyphRelayAdapter` seam in `lib/connectors/glyph-relay-adapter.ts`
+keeps that boundary explicit without unsafe casts. Recovery therefore does not
+relaunch an old deep link or reuse a completed session: a user retry registers
+a fresh Relay v2 session and builds a fresh request from the current form
+values. The launch still occurs only from a fresh activating click after
+prewarm completes.
+
+Failed and interrupted requests offer a safe diagnostic copy action. Its
+allow-listed JSON contains only protocol-level state, request type, network,
+failure classification, and retry availability. It excludes relay
+capabilities and URLs, signed material and proof fields, account identity,
+origin, user-entered message and amount, and raw errors.
+
 WalletConnect remains visible but disabled until a project ID is configured.
 
 ## Commands

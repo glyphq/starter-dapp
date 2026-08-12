@@ -15,6 +15,7 @@ import {
   type GlyphNetworkBinding,
   type GlyphPreparedRelaySession,
   type GlyphRequestStatus,
+  type GlyphRequestType,
 } from "@glyph-oss/connect";
 import type {
   SignMessageResult,
@@ -23,21 +24,88 @@ import type {
   WalletConnectorEvent,
 } from "@qubic.org/react";
 import type { Identity } from "@qubic.org/types";
+import type { GlyphRelayAdapter } from "./glyph-relay-adapter";
 
 const STORAGE_KEY = "glyph-starter-account";
 export const GLYPH_REQUEST_STATUS_EVENT = "glyph:request-status";
 /** Every Glyph request from this dApp is explicitly bound to Qubic mainnet. */
 export const GLYPH_MAINNET_NETWORK: GlyphNetworkBinding = { id: "qubic:mainnet" };
 
+export type GlyphRequestMilestone =
+  | "preparing"
+  | "opening"
+  | "awaiting_approval"
+  | "verifying"
+  | "completed"
+  | "interrupted"
+  | "failed";
+
+export type GlyphFailureCode =
+  | "session_not_ready"
+  | "preparation_failed"
+  | "relay_unavailable"
+  | "relay_timeout"
+  | "relay_closed"
+  | "wallet_rejected"
+  | "verification_failed"
+  | "invalid_response"
+  | "launch_failed"
+  | "unknown";
+
 export type GlyphRequestFeedback =
-  | { state: "opening" }
-  | { state: "waiting" }
-  | { state: "completed" }
-  | { state: "failed" };
+  | {
+      requestId: string;
+      requestType: GlyphRequestType;
+      state: GlyphRequestMilestone;
+      failureCode?: GlyphFailureCode;
+    };
+
+export type GlyphSafeDiagnostic = {
+  schema: "glyph-starter-diagnostic/v1";
+  connector: "glyph-wallet";
+  protocol: "connect-v2";
+  network: "qubic:mainnet";
+  request_type: GlyphRequestType;
+  milestone: GlyphRequestMilestone;
+  failure_code: GlyphFailureCode | null;
+  retry_available: boolean;
+};
+
 const permissions: GlyphPermission[] = ["transfer", "sign_message"];
 const listeners = new Map<WalletConnectorEvent, Set<(...args: unknown[]) => void>>();
 let preparedRelaySession: GlyphPreparedRelaySession | null = null;
 let relaySessionPreparation: Promise<GlyphPreparedRelaySession> | null = null;
+let localRequestSequence = 0;
+
+/** Runtime binding for the published Connect v4.0.1 API, kept behind the seam. */
+export const glyphRelayAdapter: GlyphRelayAdapter = {
+  prepare: prepareRelaySession,
+  subscribe: subscribeViaRelayV2,
+  launch: launchGlyphRequest,
+};
+
+class GlyphRequestFailure extends Error {
+  readonly code: GlyphFailureCode;
+
+  constructor(code: GlyphFailureCode, message: string) {
+    super(message);
+    this.name = "GlyphRequestFailure";
+    this.code = code;
+  }
+}
+
+type GlyphRequestCorrelation = {
+  requestId: string;
+  requestType: GlyphRequestType;
+};
+
+type GlyphRequestExecution = {
+  result: GlyphCallbackResponse;
+  correlation: GlyphRequestCorrelation;
+};
+
+const REQUEST_NOT_READY_MESSAGE =
+  "Glyph Wallet is preparing a secure relay session. Wait until it is ready, then try again.";
 
 function appOrigin() {
   return process.env.NEXT_PUBLIC_APP_ORIGIN ?? "https://starter.glyphq.org";
@@ -56,12 +124,131 @@ function emitRequestFeedback(detail: GlyphRequestFeedback) {
   window.dispatchEvent(new CustomEvent<GlyphRequestFeedback>(GLYPH_REQUEST_STATUS_EVENT, { detail }));
 }
 
-function mapRelayStatus(status: GlyphRequestStatus): GlyphRequestFeedback {
+function nextRequestCorrelation(request: GlyphRequest): GlyphRequestCorrelation {
+  localRequestSequence += 1;
+  return {
+    // This identifier is created and consumed only in this dApp. It is never
+    // added to the request, envelope, deep-link URL, or signed verification.
+    requestId: `local-${localRequestSequence}`,
+    requestType: request.type,
+  };
+}
+
+function emitLifecycle(
+  correlation: GlyphRequestCorrelation,
+  state: GlyphRequestMilestone,
+  failureCode?: GlyphFailureCode,
+) {
+  emitRequestFeedback({ ...correlation, state, ...(failureCode ? { failureCode } : {}) });
+}
+
+function classifyFailure(error: unknown): GlyphFailureCode {
+  if (error instanceof GlyphRequestFailure) return error.code;
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("timed out") || message.includes("timeout")) return "relay_timeout";
+  if (message.includes("closed without") || message.includes("ended without")) return "relay_closed";
+  if (
+    message.includes("signature") ||
+    message.includes("signed glyph callback") ||
+    message.includes("request_hash") ||
+    message.includes("network does not match") ||
+    message.includes("callback_url does not match")
+  ) {
+    return "verification_failed";
+  }
+  if (message.includes("relay") || message.includes("fetch") || message.includes("network")) {
+    return "relay_unavailable";
+  }
+  return "unknown";
+}
+
+function isInterruptedFailure(code: GlyphFailureCode) {
+  return code === "relay_unavailable" || code === "relay_timeout" || code === "relay_closed";
+}
+
+function failureMessage(code: GlyphFailureCode) {
+  switch (code) {
+    case "session_not_ready":
+      return REQUEST_NOT_READY_MESSAGE;
+    case "preparation_failed":
+      return "The secure Glyph session could not be prepared. Try again to create a new session.";
+    case "relay_unavailable":
+      return "The secure Glyph relay could not be reached. Prepare a new session and retry.";
+    case "relay_timeout":
+      return "The approval window expired without a response. Start a new request to retry.";
+    case "relay_closed":
+      return "The approval flow ended before a response arrived. Start a new request to retry.";
+    case "wallet_rejected":
+      return "The request was rejected in Glyph Wallet.";
+    case "verification_failed":
+      return "The wallet response could not be verified, so it was not accepted.";
+    case "invalid_response":
+      return "Glyph Wallet returned an unsupported response, so it was not accepted.";
+    case "launch_failed":
+      return "Glyph Wallet could not be opened. Try again from the request button.";
+    case "unknown":
+      return "The Glyph request could not be completed. Start a new request to retry.";
+  }
+}
+
+export function glyphFailureMessage(code: GlyphFailureCode) {
+  return failureMessage(code);
+}
+
+export function glyphRequestMilestoneLabel(state: GlyphRequestMilestone) {
+  switch (state) {
+    case "preparing": return "Preparing";
+    case "opening": return "Opening";
+    case "awaiting_approval": return "Awaiting approval";
+    case "verifying": return "Verifying";
+    case "completed": return "Completed";
+    case "interrupted": return "Interrupted";
+    case "failed": return "Failed";
+  }
+}
+
+export function isGlyphRequestRetryable(state: GlyphRequestMilestone) {
+  return state === "interrupted" || state === "failed";
+}
+
+/**
+ * Return a deliberately allow-listed diagnostic. Do not add request data here:
+ * the output must remain safe to copy into an issue without exposing callback
+ * capabilities, URLs, signed data, proof material, or user input.
+ */
+export function buildGlyphSafeDiagnostic(feedback: GlyphRequestFeedback): string {
+  const diagnostic: GlyphSafeDiagnostic = {
+    schema: "glyph-starter-diagnostic/v1",
+    connector: "glyph-wallet",
+    protocol: "connect-v2",
+    network: "qubic:mainnet",
+    request_type: feedback.requestType,
+    milestone: feedback.state,
+    failure_code: feedback.failureCode ?? null,
+    retry_available: isGlyphRequestRetryable(feedback.state),
+  };
+  return JSON.stringify(diagnostic, null, 2);
+}
+
+function mapRelayStatus(
+  correlation: GlyphRequestCorrelation,
+  status: GlyphRequestStatus,
+): GlyphRequestFeedback {
   switch (status.state) {
-    case "opening_wallet": return { state: "opening" };
-    case "awaiting_approval": return { state: "waiting" };
-    case "completed": return { state: "completed" };
-    case "failed": return { state: "failed" };
+    case "opening_wallet": return { ...correlation, state: "opening" };
+    case "awaiting_approval": return { ...correlation, state: "awaiting_approval" };
+    // The SDK calls this after its signed callback verification. The starter
+    // keeps a visible verifying milestone while it validates the typed result
+    // against the action-specific connector contract below.
+    case "completed": return { ...correlation, state: "verifying" };
+    case "failed": {
+      const failureCode = classifyFailure(status.error);
+      return {
+        ...correlation,
+        state: isInterruptedFailure(failureCode) ? "interrupted" : "failed",
+        failureCode,
+      };
+    }
   }
 }
 
@@ -73,19 +260,35 @@ function mapRelayStatus(status: GlyphRequestStatus): GlyphRequestFeedback {
  * the click path. The callback write capability remains registered before it is
  * included in any Wallet request and the read capability remains dApp-only.
  */
+function startRelaySessionPreparation(): Promise<GlyphPreparedRelaySession> {
+  relaySessionPreparation = glyphRelayAdapter
+    .prepare()
+    .then((session) => {
+      preparedRelaySession = session;
+      return session;
+    })
+    .finally(() => {
+      relaySessionPreparation = null;
+    });
+  return relaySessionPreparation;
+}
+
 export function prewarmGlyphRelaySession(): Promise<GlyphPreparedRelaySession> {
   if (preparedRelaySession) return Promise.resolve(preparedRelaySession);
-  if (!relaySessionPreparation) {
-    relaySessionPreparation = prepareRelaySession()
-      .then((session) => {
-        preparedRelaySession = session;
-        return session;
-      })
-      .finally(() => {
-        relaySessionPreparation = null;
-      });
-  }
-  return relaySessionPreparation;
+  return relaySessionPreparation ?? startRelaySessionPreparation();
+}
+
+/**
+ * Recovery-only preparation. A retry intentionally drops any unused local
+ * session and registers another one. It never relaunches the old envelope.
+ */
+export function prepareFreshGlyphRelaySession(): Promise<GlyphPreparedRelaySession> {
+  preparedRelaySession = null;
+  if (!relaySessionPreparation) return startRelaySessionPreparation();
+  return relaySessionPreparation.then(() => {
+    preparedRelaySession = null;
+    return startRelaySessionPreparation();
+  });
 }
 
 /**
@@ -113,39 +316,81 @@ export function isGlyphRelaySessionReady() {
 
 function takePreparedGlyphRelaySession() {
   if (!preparedRelaySession) {
-    throw new Error("Glyph Wallet is preparing a secure relay session. Wait until it is ready, then try again.");
+    throw new GlyphRequestFailure("session_not_ready", REQUEST_NOT_READY_MESSAGE);
   }
   const session = preparedRelaySession;
   preparedRelaySession = null;
   return session;
 }
 
-async function requestFromGlyph(request: GlyphRequest): Promise<GlyphCallbackResponse> {
-  const prepared = takePreparedGlyphRelaySession();
-  const envelope = createMainnetGlyphEnvelope(request, prepared.callbackUrl);
-  const resultPromise = subscribeViaRelayV2(request, prepared, {
-    verification: {
-      requireSigned: true,
-      expectedRequestHash: envelope.request_hash,
-      expectedNetwork: envelope.network,
-      expectedDappOrigin: request.dapp.origin,
-      expectedExp: request.exp ?? null,
-      expectedCallbackUrl: prepared.callbackUrl,
-      verifySignature: verifyWalletCallbackSignature,
-    },
-    onStatus(status) {
-      emitRequestFeedback(mapRelayStatus(status));
-    },
-  });
+async function requestFromGlyph(
+  request: GlyphRequest,
+  relayAdapter: GlyphRelayAdapter = glyphRelayAdapter,
+): Promise<GlyphRequestExecution> {
+  const correlation = nextRequestCorrelation(request);
+  let prepared: GlyphPreparedRelaySession;
+  try {
+    prepared = takePreparedGlyphRelaySession();
+  } catch (error) {
+    const failureCode = classifyFailure(error);
+    emitLifecycle(correlation, "failed", failureCode);
+    throw error;
+  }
 
-  launchGlyphRequest(envelope);
+  const envelope = createMainnetGlyphEnvelope(request, prepared.callbackUrl);
+  let resultPromise: Promise<GlyphCallbackResponse>;
+  let transportFailureReported = false;
+  try {
+    resultPromise = relayAdapter.subscribe(request, prepared, {
+      verification: {
+        requireSigned: true,
+        expectedRequestHash: envelope.request_hash,
+        expectedNetwork: envelope.network,
+        expectedDappOrigin: request.dapp.origin,
+        expectedExp: request.exp ?? null,
+        expectedCallbackUrl: prepared.callbackUrl,
+        verifySignature: verifyWalletCallbackSignature,
+      },
+      onStatus(status) {
+        if (status.state === "failed") transportFailureReported = true;
+        emitRequestFeedback(mapRelayStatus(correlation, status));
+      },
+    });
+
+    // This remains in the activating click path. Relay preparation happens
+    // before the click, while subscription and launch stay synchronous here.
+    relayAdapter.launch(envelope);
+  } catch {
+    const failure = new GlyphRequestFailure("launch_failed", failureMessage("launch_failed"));
+    emitLifecycle(correlation, "failed", failure.code);
+    throw failure;
+  }
+
   try {
     const result = await resultPromise;
     window.focus();
-    return result;
+    return { result, correlation };
   } catch (error) {
-    throw error;
+    const failureCode = classifyFailure(error);
+    const failure = new GlyphRequestFailure(failureCode, failureMessage(failureCode));
+    if (!transportFailureReported) {
+      emitLifecycle(
+        correlation,
+        isInterruptedFailure(failureCode) ? "interrupted" : "failed",
+        failureCode,
+      );
+    }
+    throw failure;
   }
+}
+
+function operationFailure(correlation: GlyphRequestCorrelation, code: GlyphFailureCode): never {
+  emitLifecycle(correlation, isInterruptedFailure(code) ? "interrupted" : "failed", code);
+  throw new GlyphRequestFailure(code, failureMessage(code));
+}
+
+function completeOperation(correlation: GlyphRequestCorrelation) {
+  emitLifecycle(correlation, "completed");
 }
 
 /** Build the only envelope this dApp launches, with an explicit mainnet binding. */
@@ -225,7 +470,7 @@ function assertPermissionsGranted(granted: GlyphPermission[]) {
 export async function requestGlyphTransfer(destination: string, amount: string) {
   const account = readAccount();
   if (!account) throw new Error("Connect Glyph Wallet before requesting a transfer.");
-  const result = await requestFromGlyph(
+  const execution = await requestFromGlyph(
     createTransferRequest({
       type: "transfer",
       dapp: dapp(),
@@ -234,18 +479,24 @@ export async function requestGlyphTransfer(destination: string, amount: string) 
       from: account.identity,
     }),
   );
-  if (result.status === "rejected") throw new Error("Transfer request was rejected.");
+  const { result, correlation } = execution;
+  if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
   if (result.status !== "signed" || result.type !== "transfer") {
-    throw new Error("Glyph Wallet returned an unexpected response.");
+    return operationFailure(correlation, "invalid_response");
   }
-  assertSameIdentity(result.identity, account.identity);
+  try {
+    assertSameIdentity(result.identity, account.identity);
+  } catch {
+    return operationFailure(correlation, "verification_failed");
+  }
+  completeOperation(correlation);
   return { txId: result.tx_hash, targetTick: result.target_tick };
 }
 
 export async function requestGlyphVerification(message: string, signatureHex: string) {
   const account = readAccount();
   if (!account) throw new Error("Connect Glyph Wallet before verifying a signature.");
-  const result = await requestFromGlyph(
+  const execution = await requestFromGlyph(
     createVerifyMessageRequest({
       type: "verify_message",
       dapp: dapp(),
@@ -254,11 +505,17 @@ export async function requestGlyphVerification(message: string, signatureHex: st
       public_key: bytesToBase64(identityToPublicKey(account.identity)),
     }),
   );
-  if (result.status === "rejected") throw new Error("Verification request was rejected.");
+  const { result, correlation } = execution;
+  if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
   if (result.status !== "verified") {
-    throw new Error("Glyph Wallet returned an unexpected response.");
+    return operationFailure(correlation, "invalid_response");
   }
-  assertSameIdentity(result.identity, account.identity);
+  try {
+    assertSameIdentity(result.identity, account.identity);
+  } catch {
+    return operationFailure(correlation, "verification_failed");
+  }
+  completeOperation(correlation);
   return result.valid;
 }
 
@@ -266,16 +523,22 @@ export const glyphConnector: WalletConnector = {
   id: "glyph-wallet",
   isAvailable: () => typeof window !== "undefined",
   async connect() {
-    const result = await requestFromGlyph(
+    const execution = await requestFromGlyph(
       createConnectRequest({ type: "connect", dapp: dapp(), permissions }),
     );
-    if (result.status === "rejected") throw new Error("Connection request was rejected.");
-    if (result.status !== "connected") throw new Error("Glyph Wallet returned an unexpected response.");
-    assertPermissionsGranted(result.permissions);
+    const { result, correlation } = execution;
+    if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
+    if (result.status !== "connected") return operationFailure(correlation, "invalid_response");
+    try {
+      assertPermissionsGranted(result.permissions);
+    } catch {
+      return operationFailure(correlation, "verification_failed");
+    }
     const account: WalletAccount = {
       identity: result.identity as Identity,
       name: "Glyph Wallet",
     };
+    completeOperation(correlation);
     saveAccount(account);
     emit("accountChanged", account);
     return account;
@@ -296,7 +559,7 @@ export const glyphConnector: WalletConnector = {
   async signMessage(message: string): Promise<SignMessageResult> {
     const account = readAccount();
     if (!account) throw new Error("Connect Glyph Wallet before signing a message.");
-    const result = await requestFromGlyph(
+    const execution = await requestFromGlyph(
       createSignMessageRequest({
         type: "sign_message",
         dapp: dapp(),
@@ -304,11 +567,17 @@ export const glyphConnector: WalletConnector = {
         from: account.identity,
       }),
     );
-    if (result.status === "rejected") throw new Error("Signature request was rejected.");
+    const { result, correlation } = execution;
+    if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
     if (result.status !== "signed" || result.type !== "sign_message") {
-      throw new Error("Glyph Wallet returned an unexpected response.");
+      return operationFailure(correlation, "invalid_response");
     }
-    assertSameIdentity(result.identity, account.identity);
+    try {
+      assertSameIdentity(result.identity, account.identity);
+    } catch {
+      return operationFailure(correlation, "verification_failed");
+    }
+    completeOperation(correlation);
     return {
       signatureHex: toHex(base64ToBytes(result.signature)),
       digestHex: toHex(k12(new TextEncoder().encode(message), 32)),

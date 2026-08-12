@@ -1,11 +1,18 @@
 import { describe, expect, mock, test } from "bun:test";
 
 Object.assign(globalThis, {
-  window: { dispatchEvent: () => true, focus: () => undefined },
+  window: {
+    dispatchEvent: (event: Event) => {
+      lifecycleDetails.push((event as CustomEvent<{ requestId: string; requestType: string; state: string }>).detail);
+      return true;
+    },
+    focus: () => undefined,
+  },
   localStorage: { getItem: () => null, removeItem: () => undefined, setItem: () => undefined },
 });
 
 const events: string[] = [];
+const lifecycleDetails: Array<{ requestId: string; requestType: string; state: string }> = [];
 const preparedSession = {
   session: "session-12345678901234567890",
   callbackUrl: "https://relay.glyphq.org/v2/callback/session-12345678901234567890/c_1234567890123456789012",
@@ -39,9 +46,12 @@ mock.module("@glyph-oss/connect", () => ({
     events.push("prepare");
     return preparation;
   },
-  subscribeViaRelayV2: (_request: unknown, session: typeof preparedSession) => {
+  subscribeViaRelayV2: (_request: unknown, session: typeof preparedSession, options?: { onStatus?: (status: unknown) => void }) => {
     events.push("subscribe");
     subscribedSession = session;
+    options?.onStatus?.({ state: "opening_wallet" });
+    options?.onStatus?.({ state: "awaiting_approval" });
+    options?.onStatus?.({ state: "completed", result: {} });
     return result;
   },
 }));
@@ -62,6 +72,7 @@ const {
 describe("Glyph secure relay launch", () => {
   test("prewarms once for deliberate Connect intents and launches only after registration", async () => {
     expect(events).toEqual([]);
+    lifecycleDetails.length = 0;
     const intents = createGlyphRequestIntentHandlers(prewarmGlyphRelaySession);
     const warming = intents.onPointerEnter();
     expect(intents.onFocus()).toBe(warming);
@@ -72,6 +83,7 @@ describe("Glyph secure relay launch", () => {
 
     await expect(glyphConnector.connect()).rejects.toThrow("preparing a secure relay session");
     expect(events).toEqual(["prepare"]);
+    lifecycleDetails.length = 0;
 
     resolvePreparation(preparedSession);
     await warming;
@@ -94,5 +106,15 @@ describe("Glyph secure relay launch", () => {
       permissions: ["transfer", "sign_message"],
     });
     await expect(connecting).resolves.toMatchObject({ identity: "A".repeat(60) });
+    expect(lifecycleDetails.map((detail) => detail.state)).toEqual([
+      "opening",
+      "awaiting_approval",
+      "verifying",
+      "failed",
+      "completed",
+    ]);
+    expect(lifecycleDetails.slice(0, 3).every((detail) => detail.requestId === "local-2")).toBe(true);
+    expect(lifecycleDetails[3]).toMatchObject({ requestId: "local-3", requestType: "connect", state: "failed" });
+    expect(lifecycleDetails[4]).toMatchObject({ requestId: "local-2", requestType: "connect", state: "completed" });
   });
 });
