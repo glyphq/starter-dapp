@@ -79,7 +79,7 @@ mock.module("@glyph-oss/connect", () => ({
         milestone: "stream_opened",
         supportId: "support-1234",
         pollAttempt: 0,
-        pollMaxAttempts: 3,
+        pollMaxAttempts: 12,
         error: null,
       },
     });
@@ -90,7 +90,7 @@ mock.module("@glyph-oss/connect", () => ({
       milestone: "result_recovered_via_poll",
       supportId: "support-1234",
       pollAttempt: 1,
-      pollMaxAttempts: 3,
+      pollMaxAttempts: 12,
       error: null,
     });
     onEvent?.({
@@ -104,7 +104,7 @@ mock.module("@glyph-oss/connect", () => ({
         milestone: "result_recovered_via_poll",
         supportId: "support-1234",
         pollAttempt: 1,
-        pollMaxAttempts: 3,
+        pollMaxAttempts: 12,
         error: null,
       },
     });
@@ -119,7 +119,7 @@ mock.module("@glyph-oss/connect", () => ({
         milestone: "callback_verified",
         supportId: "support-1234",
         pollAttempt: 1,
-        pollMaxAttempts: 3,
+        pollMaxAttempts: 12,
         error: null,
       },
     });
@@ -147,10 +147,10 @@ describe("Glyph Connect 4.1 relay lifecycle integration", () => {
 
     expect(events).toEqual(["prepare", "subscribe", "launch"]);
     expect(subscribeOptions?.requestHash).toBe("sha256:test");
-    expect(subscribeOptions?.maxPollAttempts).toBe(3);
+    expect(subscribeOptions?.maxPollAttempts).toBe(12);
     expect(subscribeOptions?.pollTimeoutMs).toBe(2_000);
     expect(subscribeOptions?.pollIntervalMs).toBe(250);
-    expect(subscribeOptions?.recoveryTimeoutMs).toBe(5_000);
+    expect(subscribeOptions?.recoveryTimeoutMs).toBe(3_500);
     expect((subscribeOptions?.verification as { requireSigned: boolean }).requireSigned).toBe(true);
 
     expect(lifecycleDetails.some((detail) => detail.state === "recovering")).toBe(true);
@@ -159,7 +159,7 @@ describe("Glyph Connect 4.1 relay lifecycle integration", () => {
       state: "completed",
       supportId: "support-1234",
       pollAttempt: 1,
-      pollMaxAttempts: 3,
+      pollMaxAttempts: 12,
     });
   });
 
@@ -173,7 +173,7 @@ describe("Glyph Connect 4.1 relay lifecycle integration", () => {
       relayMilestone: "timed_out_pending",
       supportId: "support-1234",
       pollAttempt: 3,
-      pollMaxAttempts: 3,
+      pollMaxAttempts: 12,
     });
 
     expect(JSON.parse(diagnostic)).toEqual({
@@ -187,7 +187,7 @@ describe("Glyph Connect 4.1 relay lifecycle integration", () => {
       relay_error_code: "poll_exhausted",
       support_id: "support-1234",
       poll_attempt: 3,
-      poll_max_attempts: 3,
+      poll_max_attempts: 12,
       retry_available: true,
     });
     expect(diagnostic).not.toContain("callbackUrl");

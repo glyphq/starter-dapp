@@ -87,6 +87,14 @@ export type GlyphSafeDiagnostic = {
 };
 
 const permissions: GlyphPermission[] = ["transfer", "sign_message"];
+// Keep recovery long enough to cover normal callback persistence latency while
+// bounding a missing callback to a short, retryable failure. Twelve quick
+// attempts at 250 ms cover roughly three seconds of pending responses; the
+// SDK's total budget remains the hard upper bound.
+const GLYPH_RELAY_POLL_TIMEOUT_MS = 2_000;
+const GLYPH_RELAY_POLL_INTERVAL_MS = 250;
+const GLYPH_RELAY_MAX_POLL_ATTEMPTS = 12;
+const GLYPH_RELAY_RECOVERY_TIMEOUT_MS = 3_500;
 const listeners = new Map<WalletConnectorEvent, Set<(...args: unknown[]) => void>>();
 let preparedRelaySession: GlyphPreparedRelaySession | null = null;
 let relaySessionPreparation: Promise<GlyphPreparedRelaySession> | null = null;
@@ -527,11 +535,13 @@ async function requestFromGlyph(
     resultPromise = relayAdapter.subscribe(request, prepared, {
       requestHash: envelope.request_hash,
       // Connect 4.1 performs bounded /v2/result recovery after an interrupted
-      // SSE stream. A retry from this UI still creates a new session/request.
-      maxPollAttempts: 3,
-      pollTimeoutMs: 2_000,
-      pollIntervalMs: 250,
-      recoveryTimeoutMs: 5_000,
+      // SSE stream. Keep enough attempts for rapid pending responses without
+      // extending the UI's retryable failure window. A retry from this UI
+      // still creates a new session/request.
+      maxPollAttempts: GLYPH_RELAY_MAX_POLL_ATTEMPTS,
+      pollTimeoutMs: GLYPH_RELAY_POLL_TIMEOUT_MS,
+      pollIntervalMs: GLYPH_RELAY_POLL_INTERVAL_MS,
+      recoveryTimeoutMs: GLYPH_RELAY_RECOVERY_TIMEOUT_MS,
       verification: {
         requireSigned: true,
         expectedRequestHash: envelope.request_hash,

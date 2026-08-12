@@ -12,7 +12,7 @@ describe("Glyph request lifecycle UX", () => {
       supportId: "support-1234",
       relayMilestone: "result_recovered_via_poll",
       pollAttempt: 2,
-      pollMaxAttempts: 3,
+      pollMaxAttempts: 12,
     };
     const markup = renderToStaticMarkup(
       <GlyphRequestLifecycle
@@ -25,7 +25,7 @@ describe("Glyph request lifecycle UX", () => {
     );
 
     expect(markup).toContain("Recovering result");
-    expect(markup).toContain("attempt 2 of 3");
+    expect(markup).toContain("attempt 2 of 12");
     expect(markup).toContain("Support ID");
     expect(markup).toContain("support-1234");
     expect(markup).not.toContain("Continue waiting");
