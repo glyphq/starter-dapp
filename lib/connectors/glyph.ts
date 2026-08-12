@@ -14,6 +14,7 @@ import {
   type GlyphEnvelope,
   type GlyphNetworkBinding,
   type GlyphPreparedRelaySession,
+  type GlyphRelayErrorCode,
   type GlyphRequestStatus,
   type GlyphRequestType,
 } from "@glyph-oss/connect";
@@ -24,7 +25,11 @@ import type {
   WalletConnectorEvent,
 } from "@qubic.org/react";
 import type { Identity } from "@qubic.org/types";
-import type { GlyphRelayAdapter } from "./glyph-relay-adapter";
+import type {
+  GlyphRelayAdapter,
+  GlyphRelayDiagnosticEvent,
+  GlyphRelayDiagnosticSnapshot,
+} from "./glyph-relay-adapter";
 
 const STORAGE_KEY = "glyph-starter-account";
 export const GLYPH_REQUEST_STATUS_EVENT = "glyph:request-status";
@@ -35,6 +40,7 @@ export type GlyphRequestMilestone =
   | "preparing"
   | "opening"
   | "awaiting_approval"
+  | "recovering"
   | "verifying"
   | "completed"
   | "interrupted"
@@ -53,12 +59,17 @@ export type GlyphFailureCode =
   | "unknown";
 
 export type GlyphRequestFeedback =
-  | {
-      requestId: string;
-      requestType: GlyphRequestType;
-      state: GlyphRequestMilestone;
-      failureCode?: GlyphFailureCode;
-    };
+  {
+    requestId: string;
+    requestType: GlyphRequestType;
+    state: GlyphRequestMilestone;
+    failureCode?: GlyphFailureCode;
+    relayErrorCode?: GlyphRelayErrorCode;
+    relayMilestone?: GlyphRelayDiagnosticEvent["milestone"];
+    supportId?: string | null;
+    pollAttempt?: number;
+    pollMaxAttempts?: number;
+  };
 
 export type GlyphSafeDiagnostic = {
   schema: "glyph-starter-diagnostic/v1";
@@ -68,6 +79,10 @@ export type GlyphSafeDiagnostic = {
   request_type: GlyphRequestType;
   milestone: GlyphRequestMilestone;
   failure_code: GlyphFailureCode | null;
+  relay_error_code: GlyphRelayErrorCode | null;
+  support_id: string | null;
+  poll_attempt: number;
+  poll_max_attempts: number;
   retry_available: boolean;
 };
 
@@ -77,7 +92,7 @@ let preparedRelaySession: GlyphPreparedRelaySession | null = null;
 let relaySessionPreparation: Promise<GlyphPreparedRelaySession> | null = null;
 let localRequestSequence = 0;
 
-/** Runtime binding for the published Connect v4.0.1 API, kept behind the seam. */
+/** Runtime binding for the published Connect 4.1.0 API, kept behind the seam. */
 export const glyphRelayAdapter: GlyphRelayAdapter = {
   prepare: prepareRelaySession,
   subscribe: subscribeViaRelayV2,
@@ -97,6 +112,11 @@ class GlyphRequestFailure extends Error {
 type GlyphRequestCorrelation = {
   requestId: string;
   requestType: GlyphRequestType;
+  relayErrorCode?: GlyphRelayErrorCode;
+  relayMilestone?: GlyphRelayDiagnosticEvent["milestone"];
+  supportId?: string | null;
+  pollAttempt?: number;
+  pollMaxAttempts?: number;
 };
 
 type GlyphRequestExecution = {
@@ -142,8 +162,93 @@ function emitLifecycle(
   emitRequestFeedback({ ...correlation, state, ...(failureCode ? { failureCode } : {}) });
 }
 
+const relayErrorCodes: ReadonlySet<GlyphRelayErrorCode> = new Set([
+  "invalid_options",
+  "registration_timeout",
+  "registration_failed",
+  "stream_timeout",
+  "stream_interrupted",
+  "stream_failed",
+  "poll_timeout",
+  "poll_failed",
+  "poll_exhausted",
+  "result_pending",
+  "callback_invalid",
+  "callback_verification_failed",
+  "aborted",
+]);
+
+function safeRelayErrorCode(error: unknown): GlyphRelayErrorCode | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && relayErrorCodes.has(code as GlyphRelayErrorCode)
+    ? code as GlyphRelayErrorCode
+    : undefined;
+}
+
+function safeRelaySupportId(error: unknown): string | null | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const supportId = (error as { supportId?: unknown }).supportId;
+  return typeof supportId === "string" || supportId === null ? supportId : undefined;
+}
+
+function relayFailureCode(code: GlyphRelayErrorCode | undefined): GlyphFailureCode {
+  switch (code) {
+    case "callback_verification_failed": return "verification_failed";
+    case "callback_invalid": return "invalid_response";
+    case "registration_timeout":
+    case "registration_failed":
+    case "stream_failed":
+    case "poll_failed":
+      return "relay_unavailable";
+    case "stream_timeout":
+    case "poll_timeout":
+    case "poll_exhausted":
+    case "result_pending":
+      return "relay_timeout";
+    case "stream_interrupted":
+    case "aborted":
+      return "relay_closed";
+    case "invalid_options":
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
+
+function relayDiagnosticFields(input: {
+  error?: unknown;
+  relayErrorCode?: GlyphRelayErrorCode;
+  supportId?: string | null;
+  relayMilestone?: GlyphRelayDiagnosticEvent["milestone"];
+  pollAttempt?: number;
+  pollMaxAttempts?: number;
+}): Pick<GlyphRequestFeedback, "relayErrorCode" | "relayMilestone" | "supportId" | "pollAttempt" | "pollMaxAttempts"> {
+  const relayErrorCode = input.relayErrorCode ?? safeRelayErrorCode(input.error);
+  return {
+    ...(relayErrorCode ? { relayErrorCode } : {}),
+    ...(input.relayMilestone ? { relayMilestone: input.relayMilestone } : {}),
+    ...(input.supportId !== undefined ? { supportId: input.supportId } : {}),
+    ...(input.pollAttempt !== undefined ? { pollAttempt: input.pollAttempt } : {}),
+    ...(input.pollMaxAttempts !== undefined ? { pollMaxAttempts: input.pollMaxAttempts } : {}),
+  };
+}
+
+function rememberRelayDiagnostic(correlation: GlyphRequestCorrelation, feedback: GlyphRequestFeedback) {
+  Object.assign(correlation, relayDiagnosticFields({
+    relayErrorCode: feedback.relayErrorCode,
+    supportId: feedback.supportId,
+    relayMilestone: feedback.relayMilestone,
+    pollAttempt: feedback.pollAttempt,
+    pollMaxAttempts: feedback.pollMaxAttempts,
+  }));
+  emitRequestFeedback(feedback);
+}
+
 function classifyFailure(error: unknown): GlyphFailureCode {
   if (error instanceof GlyphRequestFailure) return error.code;
+  const safeCode = safeRelayErrorCode(error);
+  if (safeCode) return relayFailureCode(safeCode);
   const message = error instanceof Error ? error.message.toLowerCase() : "";
   if (message.includes("timed out") || message.includes("timeout")) return "relay_timeout";
   if (message.includes("closed without") || message.includes("ended without")) return "relay_closed";
@@ -200,6 +305,7 @@ export function glyphRequestMilestoneLabel(state: GlyphRequestMilestone) {
     case "preparing": return "Preparing";
     case "opening": return "Opening";
     case "awaiting_approval": return "Awaiting approval";
+    case "recovering": return "Recovering result";
     case "verifying": return "Verifying";
     case "completed": return "Completed";
     case "interrupted": return "Interrupted";
@@ -225,6 +331,10 @@ export function buildGlyphSafeDiagnostic(feedback: GlyphRequestFeedback): string
     request_type: feedback.requestType,
     milestone: feedback.state,
     failure_code: feedback.failureCode ?? null,
+    relay_error_code: feedback.relayErrorCode ?? null,
+    support_id: feedback.supportId ?? null,
+    poll_attempt: feedback.pollAttempt ?? 0,
+    poll_max_attempts: feedback.pollMaxAttempts ?? 0,
     retry_available: isGlyphRequestRetryable(feedback.state),
   };
   return JSON.stringify(diagnostic, null, 2);
@@ -247,9 +357,82 @@ function mapRelayStatus(
         ...correlation,
         state: isInterruptedFailure(failureCode) ? "interrupted" : "failed",
         failureCode,
+        ...relayDiagnosticFields({
+          error: status.error,
+          supportId: safeRelaySupportId(status.error),
+        }),
       };
     }
   }
+}
+
+function mapRelaySnapshot(
+  correlation: GlyphRequestCorrelation,
+  snapshot: GlyphRelayDiagnosticSnapshot,
+): GlyphRequestFeedback {
+  const failureCode = snapshot.error ? relayFailureCode(snapshot.error.code) : undefined;
+  const state = snapshot.state === "registering"
+    ? "preparing"
+    : snapshot.state === "opening_wallet"
+      ? "opening"
+      : snapshot.state === "awaiting_approval"
+        ? "awaiting_approval"
+        : snapshot.state === "recovering" || snapshot.pollAttempt > 0
+          ? "recovering"
+          : snapshot.state === "completed"
+            ? "verifying"
+            : isInterruptedFailure(failureCode ?? "unknown") ? "interrupted" : "failed";
+  return {
+    ...correlation,
+    state,
+    ...(failureCode ? { failureCode } : {}),
+    ...relayDiagnosticFields({
+      error: snapshot.error,
+      supportId: snapshot.supportId,
+      relayMilestone: snapshot.milestone,
+      pollAttempt: snapshot.pollAttempt,
+      pollMaxAttempts: snapshot.pollMaxAttempts,
+    }),
+  };
+}
+
+function mapRelayEvent(
+  correlation: GlyphRequestCorrelation,
+  event: GlyphRelayDiagnosticEvent,
+): GlyphRequestFeedback {
+  const failureCode = event.error ? relayFailureCode(event.error.code) : undefined;
+  const state = event.milestone === "result_recovered_via_poll"
+    ? "recovering"
+    : event.milestone === "callback_verified" || event.milestone === "result_received_via_sse"
+      ? "verifying"
+      : event.milestone === "timed_out_pending"
+        ? "interrupted"
+        : event.milestone === "user_rejected"
+          ? "interrupted"
+          : event.snapshot.state === "recovering"
+            ? "recovering"
+            : event.snapshot.state === "registering"
+              ? "preparing"
+              : event.snapshot.state === "opening_wallet"
+                ? "opening"
+                : event.snapshot.state === "awaiting_approval"
+                  ? "awaiting_approval"
+                  : event.snapshot.state === "completed"
+                    ? "verifying"
+                    : "failed";
+  return {
+    ...correlation,
+    state,
+    ...(failureCode ? { failureCode } : {}),
+    ...(event.milestone === "user_rejected" ? { failureCode: "wallet_rejected" } : {}),
+    ...relayDiagnosticFields({
+      error: event.error ?? event.snapshot.error,
+      supportId: event.supportId,
+      relayMilestone: event.milestone,
+      pollAttempt: event.snapshot.pollAttempt,
+      pollMaxAttempts: event.snapshot.pollMaxAttempts,
+    }),
+  };
 }
 
 /**
@@ -342,6 +525,13 @@ async function requestFromGlyph(
   let transportFailureReported = false;
   try {
     resultPromise = relayAdapter.subscribe(request, prepared, {
+      requestHash: envelope.request_hash,
+      // Connect 4.1 performs bounded /v2/result recovery after an interrupted
+      // SSE stream. A retry from this UI still creates a new session/request.
+      maxPollAttempts: 3,
+      pollTimeoutMs: 2_000,
+      pollIntervalMs: 250,
+      recoveryTimeoutMs: 5_000,
       verification: {
         requireSigned: true,
         expectedRequestHash: envelope.request_hash,
@@ -353,7 +543,19 @@ async function requestFromGlyph(
       },
       onStatus(status) {
         if (status.state === "failed") transportFailureReported = true;
-        emitRequestFeedback(mapRelayStatus(correlation, status));
+        rememberRelayDiagnostic(correlation, mapRelayStatus(correlation, status));
+      },
+      onEvent(event) {
+        if (event.milestone === "failed") transportFailureReported = true;
+        rememberRelayDiagnostic(correlation, mapRelayEvent(correlation, event));
+      },
+      onSnapshot(snapshot) {
+        // Snapshots are the only hook that exposes bounded poll progress. Do
+        // not mirror every initial snapshot because onEvent already carries
+        // the same capability-free state transitions.
+        if (snapshot.pollAttempt > 0 || snapshot.state === "recovering" || snapshot.state === "failed") {
+          rememberRelayDiagnostic(correlation, mapRelaySnapshot(correlation, snapshot));
+        }
       },
     });
 
@@ -373,6 +575,10 @@ async function requestFromGlyph(
   } catch (error) {
     const failureCode = classifyFailure(error);
     const failure = new GlyphRequestFailure(failureCode, failureMessage(failureCode));
+    Object.assign(correlation, relayDiagnosticFields({
+      error,
+      supportId: safeRelaySupportId(error),
+    }));
     if (!transportFailureReported) {
       emitLifecycle(
         correlation,

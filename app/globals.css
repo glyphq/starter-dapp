@@ -98,7 +98,9 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 .request-lifecycle-marker svg { width: 1.05rem; height: 1.05rem; }
 .request-lifecycle-heading strong { display: block; color: var(--text-primary); font-size: .78rem; font-weight: 560; }
 .request-lifecycle-heading p { margin: .22rem 0 0; color: var(--text-secondary); font-size: .74rem; line-height: 1.45; }
+.request-lifecycle-support { display: block; margin-top: .35rem; color: var(--text-tertiary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .66rem; }
 .request-lifecycle-opening, .request-lifecycle-awaiting_approval, .request-lifecycle-verifying, .request-lifecycle-preparing { border-color: color-mix(in srgb, var(--warning) 34%, var(--border-subtle)); }
+.request-lifecycle-recovering { border-color: color-mix(in srgb, var(--warning) 34%, var(--border-subtle)); }
 .request-lifecycle-completed { border-color: color-mix(in srgb, var(--success) 36%, var(--border-subtle)); }
 .request-lifecycle-completed .request-lifecycle-marker { color: var(--success); }
 .request-lifecycle-interrupted, .request-lifecycle-failed { border-color: color-mix(in srgb, var(--danger) 36%, var(--border-subtle)); }

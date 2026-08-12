@@ -104,6 +104,10 @@ function glyphMilestoneDescription(feedback: GlyphRequestFeedback) {
   switch (feedback.state) {
     case "opening": return "Opening Glyph Wallet.";
     case "awaiting_approval": return "Approve or reject this request in Glyph Wallet.";
+    case "recovering":
+      return feedback.pollAttempt && feedback.pollMaxAttempts
+        ? `The relay stream was interrupted. Checking for the result (attempt ${feedback.pollAttempt} of ${feedback.pollMaxAttempts}).`
+        : "The relay stream was interrupted. Checking the bounded recovery window for a result.";
     case "verifying": return "Checking the verified callback against this request.";
     case "completed": return "The wallet response was verified and accepted.";
     case "interrupted":
@@ -114,7 +118,7 @@ function glyphMilestoneDescription(feedback: GlyphRequestFeedback) {
   }
 }
 
-function GlyphRequestLifecycle({
+export function GlyphRequestLifecycle({
   feedback,
   preparing,
   onRetry,
@@ -140,6 +144,9 @@ function GlyphRequestLifecycle({
             <div>
               <strong>{glyphRequestMilestoneLabel(state)}</strong>
               <p>{preparing ? "Preparing a secure Relay v2 session." : feedback ? glyphMilestoneDescription(feedback) : ""}</p>
+              {!preparing && feedback?.supportId && (
+                <small className="request-lifecycle-support">Support ID <code>{feedback.supportId}</code></small>
+              )}
             </div>
           </div>
           {retryable && feedback && (
