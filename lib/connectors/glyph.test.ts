@@ -62,11 +62,18 @@ async function createSignedEnvelope(
 ) {
   const seed = generateRandomSeed();
   const publicKey = publicKeyFromSeed(seed);
-  const request = createConnectRequest({
-    type: "connect",
-    dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
-    permissions: ["transfer", "sign_message"],
-  }, { nonce: result.nonce, exp: FUTURE_EXP });
+  const request = result.type === "sign_message"
+    ? createSignMessageRequest({
+        type: "sign_message",
+        dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
+        message: "Glyph Connect v4",
+        from: IDENTITY,
+      }, { nonce: result.nonce, exp: FUTURE_EXP })
+    : createConnectRequest({
+        type: "connect",
+        dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
+        permissions: ["transfer", "sign_message"],
+      }, { nonce: result.nonce, exp: FUTURE_EXP });
   const requestEnvelope = createMainnetGlyphEnvelope(request, CALLBACK_URL);
   const payload: GlyphCallbackSignaturePayload = {
     version: GLYPH_CALLBACK_ENVELOPE_VERSION,
@@ -212,6 +219,19 @@ describe("Glyph Connect v4 signed callback verification", () => {
       type: "connect",
       nonce: "nonce-test-123456",
       reason: "user_rejected",
+    });
+
+    await expect(verifyCallbackEnvelope(signed.envelope, verificationFor(signed))).resolves.toEqual(signed.result);
+  });
+
+  test("accepts a signed sign-message callback bound to the sign request", async () => {
+    const signed = await createSignedEnvelope({
+      status: "signed",
+      type: "sign_message",
+      nonce: "sign-nonce-123456",
+      identity: IDENTITY,
+      signature: "AQID",
+      public_key: "BAUG",
     });
 
     await expect(verifyCallbackEnvelope(signed.envelope, verificationFor(signed))).resolves.toEqual(signed.result);

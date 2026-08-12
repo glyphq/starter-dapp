@@ -105,6 +105,13 @@ polling through `/v2/result`. The adapter in
 unsafe casts. Recovered callbacks use the same strict signed v2 verification as
 SSE callbacks.
 
+The Starter passes an explicit recovery budget of up to 12 `/v2/result`
+attempts at 250 ms intervals, with a 2-second per-request timeout and a
+3.5-second total recovery cap. Connect 4.1 starts that polling only after the
+SSE stream closes, times out, or fails; it does not expose a concurrent
+open-SSE watchdog, so the Starter does not duplicate relay polling or callback
+verification in application code.
+
 Connect 4.1.0 does not expose a safe current-session "continue waiting" or
 reconnect action. The UI therefore lets the SDK finish its bounded recovery
 window, then offers a retry that registers a fresh Relay v2 session and builds a
