@@ -36,7 +36,7 @@ const result = {
   type: "connect" as const,
   nonce: "connect-nonce-1234",
   identity: "A".repeat(60),
-  permissions: ["transfer", "sign_message"],
+  permissions: ["transfer", "sc_call", "sign_message"],
 };
 
 let subscribeOptions: Record<string, unknown> | undefined;

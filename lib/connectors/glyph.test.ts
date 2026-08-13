@@ -53,7 +53,7 @@ function defaultResult(): GlyphCallbackResponse {
     type: "connect",
     nonce: "nonce-test-123456",
     identity: IDENTITY,
-    permissions: ["transfer", "sign_message"],
+    permissions: ["transfer", "sc_call", "sign_message"],
   };
 }
 
@@ -75,7 +75,7 @@ async function createSignedEnvelope(
     : createConnectRequest({
         type: "connect",
         dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
-        permissions: ["transfer", "sign_message"],
+        permissions: ["transfer", "sc_call", "sign_message"],
       }, { nonce: signedResult.nonce, exp: FUTURE_EXP });
   const requestEnvelope = createMainnetGlyphEnvelope(request, CALLBACK_URL);
   const payload: GlyphCallbackSignaturePayload = {
@@ -148,7 +148,7 @@ describe("Glyph Connect v4 request initiation", () => {
     assertMainnetV2Request(createConnectRequest({
       type: "connect",
       dapp: { name: "Glyph Qubic Starter", origin: DAPP_ORIGIN },
-      permissions: ["transfer", "sign_message"],
+      permissions: ["transfer", "sc_call", "sign_message"],
     }, { nonce: "connect-nonce-1234", exp: FUTURE_EXP }));
     assertMainnetV2Request(createTransferRequest({
       type: "transfer",
