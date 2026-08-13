@@ -54,7 +54,9 @@ export const referenceFlows = [
  * exact browser-only rejection must not become an application error.
  */
 export function isGlyphLaunchAbort(reason: unknown) {
-  return reason instanceof Error && reason.name === "AbortError" && reason.message === "The user aborted a request.";
+  if (!reason || typeof reason !== "object") return false;
+  const candidate = reason as { name?: unknown; message?: unknown };
+  return candidate.name === "AbortError" && candidate.message === "The user aborted a request.";
 }
 
 const THEME_STORAGE_KEY = "qubic-starter-theme";
@@ -249,8 +251,10 @@ export function StarterApp() {
     const suppressGlyphLaunchAbort = (event: PromiseRejectionEvent) => {
       if (isGlyphLaunchAbort(event.reason)) event.preventDefault();
     };
-    window.addEventListener("unhandledrejection", suppressGlyphLaunchAbort);
-    return () => window.removeEventListener("unhandledrejection", suppressGlyphLaunchAbort);
+    // The root-layout guard is installed before hydration. Keep this client
+    // listener for navigation after client transitions replace the document.
+    window.addEventListener("unhandledrejection", suppressGlyphLaunchAbort, { capture: true });
+    return () => window.removeEventListener("unhandledrejection", suppressGlyphLaunchAbort, { capture: true });
   }, []);
 
   useEffect(() => {
