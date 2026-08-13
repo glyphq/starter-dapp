@@ -34,23 +34,27 @@ for (const viewport of [
   }
 
   await page.keyboard.press("Escape");
-  await page.evaluate(() => {
-    localStorage.setItem("glyph-starter-connector", "glyph-wallet");
-    localStorage.setItem(
-      "glyph-starter-account",
-      JSON.stringify({ identity: "A".repeat(60), name: "Glyph Wallet" }),
-    );
-  });
-  await page.reload({ waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: "Connected" }).waitFor();
-  const connectedResults = await new AxeBuilder({ page }).analyze();
-  const connectedSerious = connectedResults.violations.filter((violation) =>
+  await page.getByRole("button", { name: "Buy ticket" }).click();
+  await page.getByRole("heading", { name: "Buy ticket" }).waitFor();
+  const ticketCount = page.getByRole("textbox", { name: "Tickets" });
+  const approvalButton = page.getByRole("button", { name: "Request Glyph approval" });
+  const contractResults = await new AxeBuilder({ page }).analyze();
+  const contractSerious = contractResults.violations.filter((violation) =>
     ["serious", "critical"].includes(violation.impact ?? ""),
   );
-  await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/connected.png`, fullPage: true });
-  if (connectedSerious.length) {
-    failures.push({ viewport: `${viewport.name}-connected`, serious: connectedSerious });
+  await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/contract-call.png`, fullPage: true });
+  if (!(await ticketCount.isVisible()) || !(await approvalButton.isDisabled()) || contractSerious.length) {
+    failures.push({
+      viewport: `${viewport.name}-contract-call`,
+      ticketInputVisible: await ticketCount.isVisible(),
+      approvalDisabledWithoutGlyph: await approvalButton.isDisabled(),
+      serious: contractSerious,
+    });
   }
+
+  await page.getByRole("button", { name: "Sign & Verify" }).click();
+  await page.getByRole("heading", { name: "Sign & Verify" }).waitFor();
+  await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/sign-verify.png`, fullPage: true });
   await context.close();
 }
 
