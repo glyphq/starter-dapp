@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     template: "%s | Qubic Wallet Flows",
   },
   applicationName: "Qubic Wallet Flows",
-  description: "A concise Qubic reference workspace for wallet connection, QX fees, and signed messages.",
+  description: "A concise Qubic reference workspace for wallet connection, a simple smart-contract call, and signed messages.",
   keywords: ["Qubic", "dApp", "wallet connectors", "Next.js", "WalletConnect"],
   openGraph: {
     title: "Qubic Wallet Flows",

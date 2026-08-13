@@ -57,8 +57,13 @@ bun run dev
 Open [http://localhost:3000](http://localhost:3000). With npm, use `npm ci` and
 the equivalent `npm run` commands.
 
-There is no checked-in `.env.example`. Create `.env.local` only when you need
-optional public configuration:
+Copy the checked-in example when optional public configuration is needed:
+
+```bash
+cp .env.example .env.local
+```
+
+Then update the values for your public deployment:
 
 ```dotenv
 # Set this to the canonical HTTPS origin where the built app is hosted.

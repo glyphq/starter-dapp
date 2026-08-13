@@ -10,7 +10,7 @@ const spaceGrotesk = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: "Wallet flows",
-  description: "A concise Qubic workspace for wallet, QX, and signed message flows.",
+  description: "A concise Qubic workspace for wallet, a simple contract call, and signed message flows.",
 };
 
 export default function Home() {

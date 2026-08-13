@@ -1,7 +1,7 @@
 "use client";
 
-import { buildQxAddToBidOrderInput } from "@qubic.org/contracts";
-import { identityToPublicKey, isValidIdentityChecksum, k12, verify } from "@qubic.org/crypto";
+import { buildQdrawBuyTicketInput } from "@qubic.org/contracts";
+import { identityToPublicKey, k12, verify } from "@qubic.org/crypto";
 import { useWallet } from "@qubic.org/react";
 import Image from "next/image";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
@@ -39,12 +39,12 @@ import {
 } from "@/lib/connectors/glyph";
 
 type Theme = "dark" | "light";
-type Flow = "connect" | "qx" | "sign-verify";
+type Flow = "connect" | "qdraw" | "sign-verify";
 type Icon = IconSvgElement;
 
 export const referenceFlows = [
   { id: "connect", label: "Connect" },
-  { id: "qx", label: "QX Add to Bid" },
+  { id: "qdraw", label: "Buy ticket" },
   { id: "sign-verify", label: "Sign & Verify" },
 ] as const satisfies ReadonlyArray<{ id: Flow; label: string }>;
 
@@ -164,10 +164,9 @@ function AccountMenu({
   );
 }
 
-function FlowHeading({ id, eyebrow, title, description }: { id: string; eyebrow: string; title: string; description: string }) {
+function FlowHeading({ id, title, description }: { id: string; title: string; description: string }) {
   return (
     <div className="flow-heading">
-      <p className="eyebrow">{eyebrow}</p>
       <h2 id={id}>{title}</h2>
       <p>{description}</p>
     </div>
@@ -226,11 +225,7 @@ export function StarterApp() {
   const [signature, setSignature] = useState<string | null>(null);
   const [verificationResult, setVerificationResult] = useState<boolean | null>(null);
   const [activeSignTab, setActiveSignTab] = useState<"sign" | "verify">("sign");
-  const [qxIssuer, setQxIssuer] = useState("");
-  const [qxAssetName, setQxAssetName] = useState("0");
-  const [qxPrice, setQxPrice] = useState("1");
-  const [qxShares, setQxShares] = useState("1");
-  const [qxAmount, setQxAmount] = useState("1");
+  const [ticketCount, setTicketCount] = useState("1");
   const [isBusy, setIsBusy] = useState(false);
 
   useEffect(() => {
@@ -385,17 +380,13 @@ export function StarterApp() {
     }
   }
 
-  async function submitQxAddToBid() {
+  async function submitQdrawTicket() {
     if (wallet.activeConnector?.id !== "glyph-wallet") {
       setActionError("Connect Glyph Wallet to request this smart-contract call.");
       return;
     }
-    if (!isValidIdentityChecksum(qxIssuer.trim())) {
-      setActionError("Enter a valid asset issuer identity.");
-      return;
-    }
-    if (![qxAssetName, qxPrice, qxShares, qxAmount].every((value) => /^\d+$/.test(value.trim()))) {
-      setActionError("Use non-negative whole numbers for the QX inputs.");
+    if (!/^\d+$/.test(ticketCount.trim()) || BigInt(ticketCount.trim()) < BigInt(1)) {
+      setActionError("Enter at least one ticket.");
       return;
     }
     if (!isGlyphRelaySessionReady()) {
@@ -405,28 +396,20 @@ export function StarterApp() {
     setIsBusy(true);
     setActionError(null);
     try {
-      const call = buildQxAddToBidOrderInput(
-        {
-          issuer: qxIssuer.trim(),
-          assetName: BigInt(qxAssetName.trim()),
-          price: BigInt(qxPrice.trim()),
-          numberOfShares: BigInt(qxShares.trim()),
-        },
-        (identity) => identityToPublicKey(identity as Parameters<typeof identityToPublicKey>[0]),
-      );
+      const call = buildQdrawBuyTicketInput({ ticketCount: BigInt(ticketCount.trim()) });
       await requestGlyphScCall({
         contractIndex: call.contractIndex,
         inputType: call.inputType,
         payload: bytesToBase64(call.payload),
-        amount: qxAmount.trim(),
+        amount: "1",
         tickOffset: 50,
       });
-      toast.success("QX request approved", {
+      toast.success("Ticket request approved", {
         description: "Glyph returned a signed smart-contract request. Chain confirmation is not shown here.",
       });
     } catch {
-      setActionError("The QX request was not approved. No chain result is shown.");
-      toast.error("QX request failed", { description: "Review the inputs and try again." });
+      setActionError("The ticket request was not approved. No chain result is shown.");
+      toast.error("Ticket request failed", { description: "Review the input and try again." });
     } finally {
       setIsBusy(false);
     }
@@ -442,11 +425,8 @@ export function StarterApp() {
       <div className="workspace-shell">
         <header className="workspace-header">
           <div className="workspace-brand">
-            <span className="workspace-brand-mark" aria-hidden="true"><HugeIcon icon={SecurityCheckIcon} size={18} /></span>
-            <div>
-              <p className="workspace-kicker">Reference workspace</p>
-              <h1>Wallet flows for Qubic</h1>
-            </div>
+            <Image className="glyph-mark workspace-brand-mark" src="/brand/glyph-mark.png" alt="Glyph" width={24} height={24} unoptimized />
+            <h1>Wallet flows for Qubic</h1>
           </div>
           <div className="workspace-header-actions">
             <Tooltip>
@@ -470,7 +450,6 @@ export function StarterApp() {
           <nav className="flow-nav" aria-label="Reference flows">
             {referenceFlows.map((item) => (
               <button key={item.id} type="button" className={`flow-nav-item ${flow === item.id ? "active" : ""}`} onClick={() => setFlow(item.id)} aria-current={flow === item.id ? "page" : undefined}>
-                <span className="flow-nav-index">{item.id === "connect" ? "01" : item.id === "qx" ? "02" : "03"}</span>
                 <span>{item.label}</span>
               </button>
             ))}
@@ -479,7 +458,7 @@ export function StarterApp() {
           <div className="flow-stage">
             {flow === "connect" && (
               <section className="flow-panel" aria-labelledby="connect-title">
-                <FlowHeading id="connect-title" eyebrow="Flow 01" title="Connect" description="Choose a wallet connector and establish an account session." />
+                <FlowHeading id="connect-title" title="Connect" description="Choose a wallet connector and establish an account session." />
                 <div className="flow-rule" />
                 {connected && wallet.account && wallet.activeConnector ? (
                   <div className="connected-state">
@@ -507,23 +486,17 @@ export function StarterApp() {
               </section>
             )}
 
-            {flow === "qx" && (
-              <section className="flow-panel" aria-labelledby="fees-title">
-                <FlowHeading id="qx-title" eyebrow="Flow 02 · Write request" title="QX Add to Bid" description="Build the authoritative QX AddToBidOrder payload and request Glyph approval." />
+            {flow === "qdraw" && (
+              <section className="flow-panel" aria-labelledby="qdraw-title">
+                <FlowHeading id="qdraw-title" title="Buy ticket" description="Build a one-field QDraw ticket request and approve it in Glyph." />
                 <div className="flow-rule" />
                 <div className="call-intro">
-                  <div><span className="data-label">Contract</span><code>QX · index 1</code></div>
-                  <div><span className="data-label">Procedure</span><code>AddToBidOrder · input type 6</code></div>
+                  <div><span className="data-label">Contract</span><code>QDraw · index 15</code></div>
+                  <div><span className="data-label">Procedure</span><code>BuyTicket · input type 1</code></div>
                 </div>
-                <form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void submitQxAddToBid(); }}>
-                  <div className="qx-input-grid">
-                    <label htmlFor="qx-issuer">Asset issuer identity<Input id="qx-issuer" value={qxIssuer} onChange={(event) => setQxIssuer(event.target.value)} placeholder="60-character Qubic identity" autoComplete="off" spellCheck={false} /></label>
-                    <label htmlFor="qx-asset-name">Asset name (uint64)<Input id="qx-asset-name" inputMode="numeric" value={qxAssetName} onChange={(event) => setQxAssetName(event.target.value)} /></label>
-                    <label htmlFor="qx-price">Bid price (int64)<Input id="qx-price" inputMode="numeric" value={qxPrice} onChange={(event) => setQxPrice(event.target.value)} /></label>
-                    <label htmlFor="qx-shares">Shares (int64)<Input id="qx-shares" inputMode="numeric" value={qxShares} onChange={(event) => setQxShares(event.target.value)} /></label>
-                    <label htmlFor="qx-amount">Call amount (QU)<Input id="qx-amount" inputMode="numeric" value={qxAmount} onChange={(event) => setQxAmount(event.target.value)} /></label>
-                  </div>
-                  <p className="qx-call-note">Defaults are intentionally low: 1 QU, price 1, and 1 share. Review every input in Glyph before approving. This workspace does not broadcast or confirm a chain result.</p>
+                <form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void submitQdrawTicket(); }}>
+                  <label htmlFor="ticket-count">Tickets<Input id="ticket-count" inputMode="numeric" value={ticketCount} onChange={(event) => setTicketCount(event.target.value)} /></label>
+                  <p className="contract-call-note">One Qubic is attached to this request. Review the final details in Glyph before approving.</p>
                   <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy || wallet.activeConnector?.id !== "glyph-wallet"}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={SecurityCheckIcon} />}{isBusy ? "Waiting for approval…" : "Request Glyph approval"}</Button></div>
                   {wallet.activeConnector?.id !== "glyph-wallet" && <p className="error-line" role="status">Connect Glyph Wallet for this signed smart-contract request.</p>}
                 </form>
@@ -532,7 +505,7 @@ export function StarterApp() {
 
             {flow === "sign-verify" && (
               <section className="flow-panel" aria-labelledby="sign-verify-title">
-                <FlowHeading id="sign-verify-title" eyebrow="Flow 03 · Wallet request" title="Sign & Verify" description="Sign a message with the active wallet or verify a signature against its identity." />
+                <FlowHeading id="sign-verify-title" title="Sign & Verify" description="Sign a message with the active wallet or verify a signature against its identity." />
                 <div className="flow-rule" />
                 {!connected ? (
                   <div className="connect-prompt compact-prompt">
