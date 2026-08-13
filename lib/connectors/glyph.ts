@@ -529,17 +529,15 @@ export function prepareFreshGlyphRelaySession(): Promise<void> {
 }
 
 /**
- * Bind relay preparation to deliberate interaction with a Glyph request control.
+ * Bind relay preparation to a deliberate click on a Glyph request control.
  *
- * These handlers intentionally only prepare the callback session. They never
- * launch a Wallet request, which remains in the connector's activating click
- * path after a registered session has been obtained.
+ * Preparing on hover, focus, or touch-start is intentionally avoided. Those
+ * events are not consent to create a single-use session and can be triggered
+ * accidentally. The click prepares only, and the next click launches after
+ * registration has completed.
  */
 export function createGlyphRequestIntentHandlers(onIntent: () => void | Promise<unknown>) {
   return {
-    onPointerEnter: onIntent,
-    onFocus: onIntent,
-    onTouchStart: onIntent,
     onClick: onIntent,
   };
 }
