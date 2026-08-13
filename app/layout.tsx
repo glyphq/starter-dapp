@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "@fontsource/geist/400.css";
 import "@fontsource/geist/500.css";
 import "@fontsource/geist/600.css";
@@ -30,7 +31,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning><Providers>{children}</Providers></body>
+      <body suppressHydrationWarning>
+        <Script id="glyph-custom-protocol-abort-guard" strategy="beforeInteractive">
+          {`window.addEventListener("unhandledrejection",function(event){var reason=event.reason;if(reason&&typeof reason==="object"&&reason.name==="AbortError"&&reason.message==="The user aborted a request."){event.preventDefault();}},true);`}
+        </Script>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
