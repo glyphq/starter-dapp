@@ -19,7 +19,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
@@ -145,20 +145,24 @@ function AccountMenu({
         <code title={identity}>{shortIdentity(identity)}</code>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="identity-menu">
-        <DropdownMenuLabel>Connected identity</DropdownMenuLabel>
-        <div className="identity-menu-details">
-          <code>{identity}</code>
-          <span>Using {connectorLabel(connector)}</span>
-        </div>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Connected identity</DropdownMenuLabel>
+          <div className="identity-menu-details">
+            <code>{identity}</code>
+            <span>Using {connectorLabel(connector)}</span>
+          </div>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onCopy}>
-          <HugeIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} />
-          {copied ? "Copied identity" : "Copy identity"}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onDisconnect} disabled={disabled} variant="destructive">
-          <HugeIcon icon={Logout01Icon} />
-          Disconnect
-        </DropdownMenuItem>
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={onCopy}>
+            <HugeIcon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} />
+            {copied ? "Copied identity" : "Copy identity"}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onDisconnect} disabled={disabled} variant="destructive">
+            <HugeIcon icon={Logout01Icon} />
+            Disconnect
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
