@@ -48,6 +48,15 @@ export const referenceFlows = [
   { id: "sign-verify", label: "Sign & Verify" },
 ] as const satisfies ReadonlyArray<{ id: Flow; label: string }>;
 
+/**
+ * Chromium can reject an internal navigation while it hands a custom `glyph:`
+ * URL to the operating system. The link launch itself still succeeds, so this
+ * exact browser-only rejection must not become an application error.
+ */
+export function isGlyphLaunchAbort(reason: unknown) {
+  return reason instanceof Error && reason.name === "AbortError" && reason.message === "The user aborted a request.";
+}
+
 const THEME_STORAGE_KEY = "qubic-starter-theme";
 const THEME_CHANGE_EVENT = "qubic-starter-theme-change";
 
@@ -235,6 +244,14 @@ export function StarterApp() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    const suppressGlyphLaunchAbort = (event: PromiseRejectionEvent) => {
+      if (isGlyphLaunchAbort(event.reason)) event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", suppressGlyphLaunchAbort);
+    return () => window.removeEventListener("unhandledrejection", suppressGlyphLaunchAbort);
+  }, []);
 
   useEffect(() => {
     const onStatus = (event: Event) => {
