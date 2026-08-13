@@ -62,7 +62,7 @@ mock.module("@glyph-oss/connect", () => ({
       type: "connect",
       nonce: request.nonce,
       identity: identities,
-      permissions: ["transfer", "sign_message"],
+      permissions: ["transfer", "sc_call", "sign_message"],
     });
   },
 }));

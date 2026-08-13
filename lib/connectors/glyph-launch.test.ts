@@ -101,7 +101,7 @@ describe("Glyph secure relay launch", () => {
       type: "connect",
       nonce: "connect-nonce-1234",
       identity: "A".repeat(60),
-      permissions: ["transfer", "sign_message"],
+      permissions: ["transfer", "sc_call", "sign_message"],
     });
     await expect(connecting).resolves.toMatchObject({ identity: "A".repeat(60) });
     expect(lifecycleDetails.map((detail) => detail.state)).toEqual([

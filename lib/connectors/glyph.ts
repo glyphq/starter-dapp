@@ -103,7 +103,7 @@ export type GlyphScCallInput = {
   tickOffset?: number;
 };
 
-const permissions: GlyphPermission[] = ["transfer", "sign_message"];
+const permissions: GlyphPermission[] = ["transfer", "sc_call", "sign_message"];
 // Keep recovery long enough to cover normal callback persistence latency while
 // bounding a missing callback to a short, retryable failure. Twelve quick
 // attempts at 250 ms cover roughly three seconds of pending responses; the
