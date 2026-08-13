@@ -34,19 +34,19 @@ for (const viewport of [
   }
 
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Buy ticket" }).click();
-  await page.getByRole("heading", { name: "Buy ticket" }).waitFor();
-  const ticketCount = page.getByRole("textbox", { name: "Tickets" });
+  await page.getByRole("button", { name: "Price oracle" }).click();
+  await page.getByRole("heading", { name: "QUtil price oracle" }).waitFor();
+  const oracleProvider = page.getByRole("combobox", { name: "Oracle source" });
   const approvalButton = page.getByRole("button", { name: "Request Glyph approval" });
   const contractResults = await new AxeBuilder({ page }).analyze();
   const contractSerious = contractResults.violations.filter((violation) =>
     ["serious", "critical"].includes(violation.impact ?? ""),
   );
   await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/contract-call.png`, fullPage: true });
-  if (!(await ticketCount.isVisible()) || !(await approvalButton.isDisabled()) || contractSerious.length) {
+  if (!(await oracleProvider.isVisible()) || !(await approvalButton.isDisabled()) || contractSerious.length) {
     failures.push({
       viewport: `${viewport.name}-contract-call`,
-      ticketInputVisible: await ticketCount.isVisible(),
+      oracleProviderVisible: await oracleProvider.isVisible(),
       approvalDisabledWithoutGlyph: await approvalButton.isDisabled(),
       serious: contractSerious,
     });

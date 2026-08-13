@@ -93,7 +93,7 @@ describe("Glyph secure relay launch", () => {
     expect(subscribedSession?.registered).toBe(true);
     expect(isGlyphRelaySessionReady()).toBe(false);
 
-    await expect(glyphConnector.connect()).rejects.toThrow("preparing a secure relay session");
+    const repeated = glyphConnector.connect();
     expect(events).toEqual(["prepare", "subscribe", "launch"]);
 
     resolveResult({
@@ -104,15 +104,13 @@ describe("Glyph secure relay launch", () => {
       permissions: ["transfer", "sc_call", "sign_message"],
     });
     await expect(connecting).resolves.toMatchObject({ identity: "A".repeat(60) });
+    await expect(repeated).resolves.toMatchObject({ identity: "A".repeat(60) });
     expect(lifecycleDetails.map((detail) => detail.state)).toEqual([
       "opening",
       "awaiting_approval",
       "verifying",
-      "failed",
       "completed",
     ]);
-    expect(lifecycleDetails.slice(0, 3).every((detail) => detail.requestId === "local-2")).toBe(true);
-    expect(lifecycleDetails[3]).toMatchObject({ requestId: "local-3", requestType: "connect", state: "failed" });
-    expect(lifecycleDetails[4]).toMatchObject({ requestId: "local-2", requestType: "connect", state: "completed" });
+    expect(lifecycleDetails.every((detail) => detail.requestId === "local-2")).toBe(true);
   });
 });
