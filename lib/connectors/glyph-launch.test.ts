@@ -71,14 +71,11 @@ const {
 } = await import("./glyph");
 
 describe("Glyph secure relay launch", () => {
-  test("prewarms once for deliberate Connect intents and launches only after registration", async () => {
+  test("prepares only after a deliberate Connect click and launches on the next click", async () => {
     expect(events).toEqual([]);
     lifecycleDetails.length = 0;
     const intents = createGlyphRequestIntentHandlers(prewarmGlyphRelaySession);
-    const warming = intents.onPointerEnter();
-    expect(intents.onFocus()).toBe(warming);
-    expect(intents.onTouchStart()).toBe(warming);
-    expect(intents.onClick()).toBe(warming);
+    const warming = intents.onClick();
     expect(events).toEqual(["prepare"]);
     expect(isGlyphRelaySessionReady()).toBe(false);
 

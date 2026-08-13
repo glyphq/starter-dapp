@@ -120,9 +120,9 @@ describe("Glyph action relay readiness", () => {
     localStorageValue = JSON.stringify({ identity, name: "Glyph Wallet" });
   });
 
-  test("prepares Sign and Verify from deliberate action intent before synchronous launch", async () => {
+  test("prepares Sign and Verify from deliberate action clicks before synchronous launch", async () => {
     const signIntent = createGlyphRequestIntentHandlers(prewarmGlyphRelaySession);
-    const signWarming = signIntent.onPointerEnter();
+    const signWarming = signIntent.onClick();
 
     expect(events).toEqual(["prepare"]);
     await expect(glyphConnector.signMessage("Sign this message")).rejects.toThrow("preparing a secure relay session");
@@ -137,7 +137,7 @@ describe("Glyph action relay readiness", () => {
     await expect(signing).resolves.toMatchObject({ signatureHex: "0102" });
 
     const verifyIntent = createGlyphRequestIntentHandlers(prewarmGlyphRelaySession);
-    const verifyWarming = verifyIntent.onFocus();
+    const verifyWarming = verifyIntent.onClick();
     expect(events).toEqual(["prepare", "subscribe:sign_message", "launch:sign_message", "prepare"]);
     nextPreparation.resolve(preparedSession);
     await verifyWarming;
@@ -174,7 +174,7 @@ describe("Glyph action relay readiness", () => {
 
   test("uses the same deliberate preparation gate for transfers", async () => {
     const transferIntent = createGlyphRequestIntentHandlers(prewarmGlyphRelaySession);
-    const warming = transferIntent.onTouchStart();
+    const warming = transferIntent.onClick();
 
     await expect(requestGlyphTransfer(identity, "1")).rejects.toThrow("preparing a secure relay session");
     nextPreparation.resolve(preparedSession);

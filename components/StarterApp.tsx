@@ -16,7 +16,7 @@ import {
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { QRCodeSVG } from "qrcode.react";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -28,7 +28,6 @@ import { toast } from "sonner";
 import { hasWalletConnectProjectId } from "@/lib/connectors";
 import {
   GLYPH_REQUEST_STATUS_EVENT,
-  createGlyphRequestIntentHandlers,
   glyphRequestMilestoneLabel,
   isGlyphRelaySessionReady,
   prepareFreshGlyphRelaySession,
@@ -192,13 +191,11 @@ function WalletChoice({
   connector,
   pendingId,
   glyphRelayPreparing,
-  onGlyphIntent,
   onConnect,
 }: {
   connector: { id: string };
   pendingId: string | null;
   glyphRelayPreparing: boolean;
-  onGlyphIntent: () => void;
   onConnect: (id: string) => void;
 }) {
   const pending = pendingId === connector.id;
@@ -207,9 +204,6 @@ function WalletChoice({
     <Button
       variant="outline"
       className="connector-choice"
-      onPointerEnter={isGlyph ? onGlyphIntent : undefined}
-      onFocus={isGlyph ? onGlyphIntent : undefined}
-      onTouchStart={isGlyph ? onGlyphIntent : undefined}
       onClick={() => onConnect(connector.id)}
       disabled={Boolean(pendingId) || (isGlyph && glyphRelayPreparing)}
     >
@@ -304,16 +298,6 @@ export function StarterApp() {
         toast.error("Wallet session preparation failed", { description: "Try the wallet request again." });
       });
   }, [glyphRelayPreparing]);
-
-  const glyphIntentHandlers = useMemo(() => {
-    const handlers = createGlyphRequestIntentHandlers(() => prepareGlyphRelayForIntent());
-    return {
-      onPointerEnter: () => handlers.onPointerEnter(),
-      onFocus: () => handlers.onFocus(),
-      onTouchStart: () => handlers.onTouchStart(),
-      onClick: () => handlers.onClick(),
-    };
-  }, [prepareGlyphRelayForIntent]);
 
   function openConnectorModal() {
     setActionError(null);
@@ -478,7 +462,7 @@ export function StarterApp() {
             {wallet.account && wallet.activeConnector ? (
               <AccountMenu identity={wallet.account.identity} connector={wallet.activeConnector.id} copied={copiedIdentity} onCopy={() => void copyIdentity()} onDisconnect={() => void disconnect()} disabled={Boolean(pendingId)} />
             ) : (
-              <Button variant="outline" size="sm" onClick={() => { setFlow("connect"); openConnectorModal(); prepareGlyphRelayForIntent(); }}>
+              <Button variant="outline" size="sm" onClick={() => { setFlow("connect"); openConnectorModal(); }}>
                 <HugeIcon icon={Wallet01Icon} />
                 Connect wallet
               </Button>
@@ -519,10 +503,7 @@ export function StarterApp() {
                     </div>
                     <Button
                       className="primary-button"
-                      onPointerEnter={() => prepareGlyphRelayForIntent()}
-                      onFocus={() => prepareGlyphRelayForIntent()}
-                      onTouchStart={() => prepareGlyphRelayForIntent()}
-                      onClick={() => { openConnectorModal(); prepareGlyphRelayForIntent(); }}
+                      onClick={openConnectorModal}
                     >
                       <HugeIcon icon={Wallet01Icon} />Choose wallet
                     </Button>
@@ -540,7 +521,7 @@ export function StarterApp() {
                   <div><span className="data-label">Contract</span><code>QDraw · index 15</code></div>
                   <div><span className="data-label">Procedure</span><code>BuyTicket · input type 1</code></div>
                 </div>
-                <form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void submitQdrawTicket(); }}>
+                <form className="task-form" onSubmit={(event) => { event.preventDefault(); void submitQdrawTicket(); }}>
                   <label htmlFor="ticket-count">Tickets<Input id="ticket-count" inputMode="numeric" value={ticketCount} onChange={(event) => setTicketCount(event.target.value)} /></label>
                   <p className="contract-call-note">One Qubic is attached to this request. Review the final details in Glyph before approving.</p>
                   <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy || wallet.activeConnector?.id !== "glyph-wallet"}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={SecurityCheckIcon} />}{isBusy ? "Waiting for approval…" : "Request Glyph approval"}</Button></div>
@@ -556,13 +537,7 @@ export function StarterApp() {
                 {!connected ? (
                   <div className="connect-prompt compact-prompt">
                     <div><strong>Wallet required</strong><p>Connect a wallet before sending a signing request.</p></div>
-                    <Button
-                      className="primary-button"
-                      onPointerEnter={() => prepareGlyphRelayForIntent()}
-                      onFocus={() => prepareGlyphRelayForIntent()}
-                      onTouchStart={() => prepareGlyphRelayForIntent()}
-                      onClick={() => { setFlow("connect"); openConnectorModal(); prepareGlyphRelayForIntent(); }}
-                    ><HugeIcon icon={Wallet01Icon} />Connect wallet</Button>
+                    <Button className="primary-button" onClick={() => { setFlow("connect"); openConnectorModal(); }}><HugeIcon icon={Wallet01Icon} />Connect wallet</Button>
                   </div>
                 ) : (
                   <Tabs value={activeSignTab} onValueChange={(value) => setActiveSignTab(value as "sign" | "verify")}>
@@ -571,14 +546,14 @@ export function StarterApp() {
                       <TabsTrigger value="verify"><HugeIcon icon={SecurityCheckIcon} />Verify</TabsTrigger>
                     </TabsList>
                     <TabsContent value="sign">
-                      <form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void signMessage(); }}>
+                      <form className="task-form" onSubmit={(event) => { event.preventDefault(); void signMessage(); }}>
                         <label htmlFor="sign-message">Message<textarea id="sign-message" value={message} onChange={(event) => { setMessage(event.target.value); setSignature(null); }} /></label>
                         <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={Pen01Icon} />}{isBusy ? "Signing…" : "Sign message"}</Button></div>
                         {signature && <div className="output-block"><span className="data-label">Signature</span><code>{signature}</code></div>}
                       </form>
                     </TabsContent>
                     <TabsContent value="verify">
-                      <form className="task-form" {...(wallet.activeConnector?.id === "glyph-wallet" ? glyphIntentHandlers : {})} onSubmit={(event) => { event.preventDefault(); void verifyMessageSignature(); }}>
+                      <form className="task-form" onSubmit={(event) => { event.preventDefault(); void verifyMessageSignature(); }}>
                         <label htmlFor="verify-message">Message<textarea id="verify-message" value={message} onChange={(event) => { setMessage(event.target.value); setVerificationResult(null); }} /></label>
                         <label htmlFor="verify-signature">Signature<Input id="verify-signature" value={verifySignature} onChange={(event) => { setVerifySignature(event.target.value); setVerificationResult(null); }} placeholder="Hex signature" autoComplete="off" spellCheck={false} /></label>
                         <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={SecurityCheckIcon} />}{isBusy ? "Checking…" : "Verify signature"}</Button></div>
@@ -607,7 +582,6 @@ export function StarterApp() {
                   connector={connector}
                   pendingId={pendingId}
                   glyphRelayPreparing={glyphRelayPreparing}
-                  onGlyphIntent={() => prepareGlyphRelayForIntent()}
                   onConnect={(id) => void connect(id)}
                 />
               ))}
