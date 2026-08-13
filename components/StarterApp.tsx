@@ -303,6 +303,10 @@ export function StarterApp() {
     setActionError(null);
     setPairingUri(null);
     setDialogOpen(true);
+    // This is an explicit request to choose a wallet, not incidental pointer
+    // activity. Preparing here gives the connector choice time to become
+    // ready without creating sessions on hover or focus.
+    prepareGlyphRelayForIntent();
   }
 
   async function connect(connectorId: string, freshRetry = false) {
