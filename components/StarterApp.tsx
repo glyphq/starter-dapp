@@ -1,6 +1,12 @@
 "use client";
 
-import { buildQdrawBuyTicketInput } from "@qubic.org/contracts";
+import {
+  buildQUtilQueryPriceOracleRequest,
+  formatDatetimeLocalUtc,
+  qutilPriceOraclePairs,
+  qutilPriceOracleProviders,
+  validateQUtilPriceOracleInput,
+} from "@/lib/contracts/qutil-price-oracle";
 import { identityToPublicKey, k12, verify } from "@qubic.org/crypto";
 import { useWallet } from "@qubic.org/react";
 import Image from "next/image";
@@ -38,12 +44,12 @@ import {
 } from "@/lib/connectors/glyph";
 
 type Theme = "dark" | "light";
-type Flow = "connect" | "qdraw" | "sign-verify";
+type Flow = "connect" | "qutil-price-oracle" | "sign-verify";
 type Icon = IconSvgElement;
 
 export const referenceFlows = [
   { id: "connect", label: "Connect" },
-  { id: "qdraw", label: "Buy ticket" },
+  { id: "qutil-price-oracle", label: "Price oracle" },
   { id: "sign-verify", label: "Sign & Verify" },
 ] as const satisfies ReadonlyArray<{ id: Flow; label: string }>;
 
@@ -105,10 +111,6 @@ function hexToBytes(value: string) {
     throw new Error("Enter a complete hexadecimal signature.");
   }
   return Uint8Array.from(normalized.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
-}
-
-function bytesToBase64(bytes: Uint8Array) {
-  return btoa(String.fromCharCode(...bytes));
 }
 
 function safeErrorMessage(error: unknown, fallback: string) {
@@ -247,7 +249,10 @@ export function StarterApp() {
   const [signature, setSignature] = useState<string | null>(null);
   const [verificationResult, setVerificationResult] = useState<boolean | null>(null);
   const [activeSignTab, setActiveSignTab] = useState<"sign" | "verify">("sign");
-  const [ticketCount, setTicketCount] = useState("1");
+  const [oracleProvider, setOracleProvider] = useState<string>(qutilPriceOracleProviders[0].id);
+  const [oraclePair, setOraclePair] = useState(`${qutilPriceOraclePairs[0].base}/${qutilPriceOraclePairs[0].quote}`);
+  const [oracleTimestampUtc, setOracleTimestampUtc] = useState(() => formatDatetimeLocalUtc());
+  const [oracleTimeoutSeconds, setOracleTimeoutSeconds] = useState("60");
   const [isBusy, setIsBusy] = useState(false);
 
   useEffect(() => {
@@ -408,13 +413,9 @@ export function StarterApp() {
     }
   }
 
-  async function submitQdrawTicket() {
+  async function submitQUtilPriceOracleQuery() {
     if (wallet.activeConnector?.id !== "glyph-wallet") {
       setActionError("Connect Glyph Wallet to request this smart-contract call.");
-      return;
-    }
-    if (!/^\d+$/.test(ticketCount.trim()) || BigInt(ticketCount.trim()) < BigInt(1)) {
-      setActionError("Enter at least one ticket.");
       return;
     }
     if (!isGlyphRelaySessionReady()) {
@@ -424,20 +425,29 @@ export function StarterApp() {
     setIsBusy(true);
     setActionError(null);
     try {
-      const call = buildQdrawBuyTicketInput({ ticketCount: BigInt(ticketCount.trim()) });
-      await requestGlyphScCall({
-        contractIndex: call.contractIndex,
-        inputType: call.inputType,
-        payload: bytesToBase64(call.payload),
-        amount: "1",
-        tickOffset: 50,
+      const query = validateQUtilPriceOracleInput({
+        provider: oracleProvider,
+        pair: oraclePair,
+        timestampUtc: oracleTimestampUtc,
+        timeoutSeconds: oracleTimeoutSeconds,
       });
-      toast.success("Ticket request approved", {
+      await requestGlyphScCall(buildQUtilQueryPriceOracleRequest(query));
+      toast.success("Oracle query request approved", {
         description: "Glyph returned a signed smart-contract request. Chain confirmation is not shown here.",
       });
-    } catch {
-      setActionError("The ticket request was not approved. No chain result is shown.");
-      toast.error("Ticket request failed", { description: "Review the input and try again." });
+    } catch (error) {
+      const message = error instanceof Error && [
+        "Choose one of the official Price oracle providers shown in the form.",
+        "Choose one of the documented USDT pairs shown in the form.",
+        "Timeout must be a whole number from 1 to 3600 seconds.",
+        "Enter a UTC timestamp in YYYY-MM-DDTHH:mm format.",
+        "Enter a real UTC calendar date and time.",
+        "Choose a timestamp that is not in the future.",
+      ].includes(error.message)
+        ? error.message
+        : "The oracle query request was not approved. No chain result is shown.";
+      setActionError(message);
+      toast.error("Oracle query request failed", { description: message });
     } finally {
       setIsBusy(false);
     }
@@ -517,17 +527,32 @@ export function StarterApp() {
               </section>
             )}
 
-            {flow === "qdraw" && (
-              <section className="flow-panel" aria-labelledby="qdraw-title">
-                <FlowHeading id="qdraw-title" title="Buy ticket" description="Build a one-field QDraw ticket request and approve it in Glyph." />
+            {flow === "qutil-price-oracle" && (
+              <section className="flow-panel" aria-labelledby="qutil-price-oracle-title">
+                <FlowHeading id="qutil-price-oracle-title" title="QUtil price oracle" description="Build the official QUtil QueryPriceOracle request and approve it in Glyph." />
                 <div className="flow-rule" />
                 <div className="call-intro">
-                  <div><span className="data-label">Contract</span><code>QDraw · index 15</code></div>
-                  <div><span className="data-label">Procedure</span><code>BuyTicket · input type 1</code></div>
+                  <div><span className="data-label">Contract</span><code>QUtil · index 4</code></div>
+                  <div><span className="data-label">Procedure</span><code>QueryPriceOracle · input type 100</code></div>
+                  <div><span className="data-label">Burned fee</span><code>10 QU attached to the call</code></div>
                 </div>
-                <form className="task-form" onSubmit={(event) => { event.preventDefault(); void submitQdrawTicket(); }}>
-                  <label htmlFor="ticket-count">Tickets<Input id="ticket-count" inputMode="numeric" value={ticketCount} onChange={(event) => setTicketCount(event.target.value)} /></label>
-                  <p className="contract-call-note">One Qubic is attached to this request. Review the final details in Glyph before approving.</p>
+                <form className="task-form" onSubmit={(event) => { event.preventDefault(); void submitQUtilPriceOracleQuery(); }}>
+                  <label htmlFor="oracle-provider">Oracle source
+                    <select id="oracle-provider" value={oracleProvider} onChange={(event) => setOracleProvider(event.target.value)}>
+                      {qutilPriceOracleProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label} · id bytes ({provider.id})</option>)}
+                    </select>
+                  </label>
+                  <label htmlFor="oracle-pair">Currency pair
+                    <select id="oracle-pair" value={oraclePair} onChange={(event) => setOraclePair(event.target.value)}>
+                      {qutilPriceOraclePairs.map((pair) => {
+                        const value = `${pair.base}/${pair.quote}`;
+                        return <option key={value} value={value}>{value} · id bytes ({pair.base}) and ({pair.quote})</option>;
+                      })}
+                    </select>
+                  </label>
+                  <label htmlFor="oracle-timestamp">Timestamp (UTC)<Input id="oracle-timestamp" type="datetime-local" value={oracleTimestampUtc} onChange={(event) => setOracleTimestampUtc(event.target.value)} /></label>
+                  <label htmlFor="oracle-timeout">Timeout seconds<Input id="oracle-timeout" inputMode="numeric" value={oracleTimeoutSeconds} onChange={(event) => setOracleTimeoutSeconds(event.target.value)} /></label>
+                  <p className="contract-call-note">This uses opaque 32-byte QPI id fields for provider and currency tickers. The starter only exposes official provider ids and documented USDT pairs, validates the timestamp and timeout, and attaches exactly 10 QU because the query fee is burned by the protocol.</p>
                   <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy || wallet.activeConnector?.id !== "glyph-wallet"}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={SecurityCheckIcon} />}{isBusy ? "Waiting for approval…" : "Request Glyph approval"}</Button></div>
                   {wallet.activeConnector?.id !== "glyph-wallet" && <p className="error-line" role="status">Connect Glyph Wallet for this signed smart-contract request.</p>}
                 </form>
