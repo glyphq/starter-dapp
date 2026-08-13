@@ -191,21 +191,34 @@ function FlowHeading({ id, title, description }: { id: string; title: string; de
 function WalletChoice({
   connector,
   pendingId,
+  glyphRelayPreparing,
+  onGlyphIntent,
   onConnect,
 }: {
   connector: { id: string };
   pendingId: string | null;
+  glyphRelayPreparing: boolean;
+  onGlyphIntent: () => void;
   onConnect: (id: string) => void;
 }) {
   const pending = pendingId === connector.id;
+  const isGlyph = connector.id === "glyph-wallet";
   return (
-    <Button variant="outline" className="connector-choice" onClick={() => onConnect(connector.id)} disabled={Boolean(pendingId)}>
+    <Button
+      variant="outline"
+      className="connector-choice"
+      onPointerEnter={isGlyph ? onGlyphIntent : undefined}
+      onFocus={isGlyph ? onGlyphIntent : undefined}
+      onTouchStart={isGlyph ? onGlyphIntent : undefined}
+      onClick={() => onConnect(connector.id)}
+      disabled={Boolean(pendingId) || (isGlyph && glyphRelayPreparing)}
+    >
       <span className="connector-choice-mark"><ConnectorMark connectorId={connector.id} /></span>
       <span className="connector-choice-copy">
         <strong>{connectorLabel(connector.id)}</strong>
-        <small>{connector.id === "glyph-wallet" ? "Secure Glyph relay" : "Browser wallet connector"}</small>
+        <small>{isGlyph && glyphRelayPreparing ? "Preparing secure session" : isGlyph ? "Secure Glyph relay" : "Browser wallet connector"}</small>
       </span>
-      {pending ? <LoadingIcon /> : null}
+      {pending || (isGlyph && glyphRelayPreparing) ? <LoadingIcon /> : null}
     </Button>
   );
 }
@@ -277,14 +290,13 @@ export function StarterApp() {
     window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
   };
 
-  const prepareGlyphRelayForIntent = useCallback((fresh = false, onReady?: () => void) => {
+  const prepareGlyphRelayForIntent = useCallback((fresh = false) => {
     if (glyphRelayPreparing) return;
     setGlyphRelayPreparing(true);
     setActionError(null);
     void (fresh ? prepareFreshGlyphRelaySession() : prewarmGlyphRelaySession())
       .then(() => {
         setGlyphRelayPreparing(false);
-        onReady?.();
       })
       .catch(() => {
         setGlyphRelayPreparing(false);
@@ -311,7 +323,10 @@ export function StarterApp() {
 
   async function connect(connectorId: string, freshRetry = false) {
     if (connectorId === "glyph-wallet" && (freshRetry || !isGlyphRelaySessionReady())) {
-      prepareGlyphRelayForIntent(freshRetry, () => void connect(connectorId));
+      // A custom protocol must be launched from a live user gesture. Never
+      // retry this asynchronously after relay registration because browsers
+      // can abort the handoff once that gesture has ended.
+      prepareGlyphRelayForIntent(freshRetry);
       return;
     }
     setPendingId(connectorId);
@@ -502,7 +517,13 @@ export function StarterApp() {
                       <strong>Start with a wallet</strong>
                       <p>Only available connectors appear here. Glyph requests use the signed Relay v2 path.</p>
                     </div>
-                    <Button className="primary-button" onClick={() => { openConnectorModal(); prepareGlyphRelayForIntent(); }}>
+                    <Button
+                      className="primary-button"
+                      onPointerEnter={() => prepareGlyphRelayForIntent()}
+                      onFocus={() => prepareGlyphRelayForIntent()}
+                      onTouchStart={() => prepareGlyphRelayForIntent()}
+                      onClick={() => { openConnectorModal(); prepareGlyphRelayForIntent(); }}
+                    >
                       <HugeIcon icon={Wallet01Icon} />Choose wallet
                     </Button>
                   </div>
@@ -535,7 +556,13 @@ export function StarterApp() {
                 {!connected ? (
                   <div className="connect-prompt compact-prompt">
                     <div><strong>Wallet required</strong><p>Connect a wallet before sending a signing request.</p></div>
-                    <Button className="primary-button" onClick={() => { setFlow("connect"); openConnectorModal(); prepareGlyphRelayForIntent(); }}><HugeIcon icon={Wallet01Icon} />Connect wallet</Button>
+                    <Button
+                      className="primary-button"
+                      onPointerEnter={() => prepareGlyphRelayForIntent()}
+                      onFocus={() => prepareGlyphRelayForIntent()}
+                      onTouchStart={() => prepareGlyphRelayForIntent()}
+                      onClick={() => { setFlow("connect"); openConnectorModal(); prepareGlyphRelayForIntent(); }}
+                    ><HugeIcon icon={Wallet01Icon} />Connect wallet</Button>
                   </div>
                 ) : (
                   <Tabs value={activeSignTab} onValueChange={(value) => setActiveSignTab(value as "sign" | "verify")}>
@@ -574,7 +601,16 @@ export function StarterApp() {
               <DialogDescription>Select an available connector to continue.</DialogDescription>
             </DialogHeader>
             <div className="connector-list">
-              {availableConnectors.map((connector) => <WalletChoice key={connector.id} connector={connector} pendingId={pendingId} onConnect={(id) => void connect(id)} />)}
+              {availableConnectors.map((connector) => (
+                <WalletChoice
+                  key={connector.id}
+                  connector={connector}
+                  pendingId={pendingId}
+                  glyphRelayPreparing={glyphRelayPreparing}
+                  onGlyphIntent={() => prepareGlyphRelayForIntent()}
+                  onConnect={(id) => void connect(id)}
+                />
+              ))}
             </div>
             {pairingUri && <div className="pairing-box"><QRCodeSVG value={pairingUri} size={168} includeMargin bgColor="transparent" fgColor="currentColor" /><p>Scan with your WalletConnect wallet.</p></div>}
             {actionError && <p className="error-line" role="alert">{actionError}</p>}
