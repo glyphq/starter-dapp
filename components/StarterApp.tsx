@@ -7,6 +7,12 @@ import {
   qutilPriceOracleProviders,
   validateQUtilPriceOracleInput,
 } from "@/lib/contracts/qutil-price-oracle";
+import {
+  pollQUtilOracleConfirmation,
+  pendingQUtilOracleConfirmation,
+  QUBIC_EXPLORER_TRANSACTION_URL,
+  type QUtilOracleConfirmation,
+} from "@/lib/contracts/qutil-price-oracle-result";
 import { identityToPublicKey, k12, verify } from "@qubic.org/crypto";
 import { useWallet } from "@qubic.org/react";
 import Image from "next/image";
@@ -22,7 +28,7 @@ import {
   Wallet01Icon,
 } from "@hugeicons/core-free-icons";
 import { QRCodeSVG } from "qrcode.react";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -233,6 +239,43 @@ function RequestStatus({ feedback, preparing }: { feedback: GlyphRequestFeedback
   );
 }
 
+function OracleConfirmationStatus({ confirmation }: { confirmation: QUtilOracleConfirmation | null }) {
+  if (!confirmation) return null;
+  const explorerUrl = QUBIC_EXPLORER_TRANSACTION_URL(confirmation.transactionId);
+
+  return (
+    <div className={`oracle-confirmation ${confirmation.state}`} role="status" aria-live="polite">
+      <div className="oracle-confirmation-heading">
+        {confirmation.state === "pending" ? <LoadingIcon /> : null}
+        <strong>
+          {confirmation.state === "pending"
+            ? "Waiting for network confirmation"
+            : confirmation.state === "confirmed"
+              ? "Network status indexed"
+              : "Archive status unavailable"}
+        </strong>
+      </div>
+      {confirmation.state === "pending" ? (
+        <p>
+          Glyph signed the call. Qubic&apos;s official archive is being checked for its oracle status event.
+          {confirmation.queryId ? <> Query ID <code>{confirmation.queryId}</code> remains pending external oracle fulfillment.</> : null}
+        </p>
+      ) : confirmation.state === "confirmed" ? (
+        <>
+          <div className="oracle-confirmation-data">
+            <span>Oracle query ID</span><code>{confirmation.queryId}</code>
+            <span>Archive status code</span><code>{confirmation.queryStatus}</code>
+          </div>
+          <p>QUtil creates an asynchronous oracle query. The official archive exposes this ID and raw status, not a readable price result, so no price is shown. External oracle fulfillment remains pending.</p>
+        </>
+      ) : (
+        <p>{confirmation.message}</p>
+      )}
+      <a href={explorerUrl} target="_blank" rel="noreferrer">View transaction in Qubic Explorer</a>
+    </div>
+  );
+}
+
 export function StarterApp() {
   const wallet = useWallet();
   const theme = useSyncExternalStore<Theme>(subscribeToTheme, readStoredTheme, () => "dark");
@@ -253,6 +296,8 @@ export function StarterApp() {
   const [oraclePair, setOraclePair] = useState(`${qutilPriceOraclePairs[0].base}/${qutilPriceOraclePairs[0].quote}`);
   const [oracleTimestampUtc, setOracleTimestampUtc] = useState(() => formatDatetimeLocalUtc());
   const [oracleTimeoutSeconds, setOracleTimeoutSeconds] = useState("60");
+  const [oracleConfirmation, setOracleConfirmation] = useState<QUtilOracleConfirmation | null>(null);
+  const oraclePollController = useRef<AbortController | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
   useEffect(() => {
@@ -268,6 +313,8 @@ export function StarterApp() {
     window.addEventListener("unhandledrejection", suppressGlyphLaunchAbort, { capture: true });
     return () => window.removeEventListener("unhandledrejection", suppressGlyphLaunchAbort, { capture: true });
   }, []);
+
+  useEffect(() => () => oraclePollController.current?.abort(), []);
 
   useEffect(() => {
     const onStatus = (event: Event) => {
@@ -424,6 +471,8 @@ export function StarterApp() {
     }
     setIsBusy(true);
     setActionError(null);
+    oraclePollController.current?.abort();
+    setOracleConfirmation(null);
     try {
       const query = validateQUtilPriceOracleInput({
         provider: oracleProvider,
@@ -431,9 +480,27 @@ export function StarterApp() {
         timestampUtc: oracleTimestampUtc,
         timeoutSeconds: oracleTimeoutSeconds,
       });
-      await requestGlyphScCall(buildQUtilQueryPriceOracleRequest(query));
-      toast.success("Oracle query request approved", {
-        description: "Glyph returned a signed smart-contract request. Chain confirmation is not shown here.",
+      const { txId, targetTick } = await requestGlyphScCall(buildQUtilQueryPriceOracleRequest(query));
+      const pendingConfirmation = pendingQUtilOracleConfirmation(txId, targetTick);
+      setOracleConfirmation(pendingConfirmation);
+      const controller = new AbortController();
+      oraclePollController.current = controller;
+      void pollQUtilOracleConfirmation({
+        transactionId: txId,
+        targetTick,
+        signal: controller.signal,
+        onUpdate: setOracleConfirmation,
+      }).catch(() => {
+        if (!controller.signal.aborted) {
+          setOracleConfirmation({
+            state: "unavailable",
+            transactionId: txId,
+            message: "The official Qubic archive could not be read. Check the transaction in Explorer.",
+          });
+        }
+      });
+      toast.success("Oracle query signed", {
+        description: "Waiting for network confirmation. No price is claimed.",
       });
     } catch (error) {
       const message = error instanceof Error && [
@@ -555,6 +622,7 @@ export function StarterApp() {
                   <p className="contract-call-note">This uses opaque 32-byte QPI id fields for provider and currency tickers. The starter only exposes official provider ids and documented USDT pairs, validates the timestamp and timeout, and attaches exactly 10 QU because the query fee is burned by the protocol.</p>
                   <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy || wallet.activeConnector?.id !== "glyph-wallet"}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={SecurityCheckIcon} />}{isBusy ? "Waiting for approval…" : "Request Glyph approval"}</Button></div>
                   {wallet.activeConnector?.id !== "glyph-wallet" && <p className="error-line" role="status">Connect Glyph Wallet for this signed smart-contract request.</p>}
+                  <OracleConfirmationStatus confirmation={oracleConfirmation} />
                 </form>
               </section>
             )}
