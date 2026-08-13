@@ -117,6 +117,12 @@ let preparedRelaySession: GlyphPreparedRelaySession | null = null;
 let relaySessionPreparation: Promise<GlyphPreparedRelaySession> | null = null;
 let relaySessionReadiness: Promise<void> | null = null;
 let localRequestSequence = 0;
+// A relay session is single-use, but a second event handler can still reach a
+// request helper while the first request is awaiting the wallet callback. Keep
+// the complete action single-flight per request type so duplicate React
+// handlers, propagated clicks, or direct callers share its one envelope,
+// validation, and lifecycle result.
+const inFlightGlyphRequests = new Map<GlyphRequestType, Promise<unknown>>();
 
 /** Runtime binding for the published Connect 4.1.0 API, kept behind the seam. */
 export const glyphRelayAdapter: GlyphRelayAdapter = {
@@ -558,6 +564,30 @@ function takePreparedGlyphRelaySession() {
   return session;
 }
 
+function runGlyphOperation<Result>(requestType: GlyphRequestType, operation: () => Promise<Result>): Promise<Result> {
+  const existing = inFlightGlyphRequests.get(requestType);
+  if (existing) return existing as Promise<Result>;
+
+  // Invoke synchronously. In particular, do not insert an await before
+  // `relayAdapter.launch`, because the custom-protocol handoff must retain the
+  // activating user gesture.
+  const inFlight = operation();
+  inFlightGlyphRequests.set(requestType, inFlight);
+  void inFlight.then(
+    () => {
+      if (inFlightGlyphRequests.get(requestType) === inFlight) {
+        inFlightGlyphRequests.delete(requestType);
+      }
+    },
+    () => {
+      if (inFlightGlyphRequests.get(requestType) === inFlight) {
+        inFlightGlyphRequests.delete(requestType);
+      }
+    },
+  );
+  return inFlight;
+}
+
 async function requestFromGlyph(
   request: GlyphRequest,
   relayAdapter: GlyphRelayAdapter = glyphRelayAdapter,
@@ -822,104 +852,112 @@ export function createGlyphScCallRequest(input: GlyphScCallInput): GlyphScCallRe
   return createGlyphScCallRequestForAccount(input, account);
 }
 
-export async function requestGlyphTransfer(destination: string, amount: string) {
-  const account = readAccount();
-  if (!account) throw new Error("Connect Glyph Wallet before requesting a transfer.");
-  const execution = await requestFromGlyph(
-    createTransferRequest({
-      type: "transfer",
-      dapp: dapp(),
-      to: destination,
-      amount,
-      from: account.identity,
-    }),
-  );
-  const { result, correlation } = execution;
-  if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
-  if (result.status !== "signed" || result.type !== "transfer") {
-    return operationFailure(correlation, "invalid_response");
-  }
-  try {
-    assertSameIdentity(result.identity, account.identity);
-    assertValidIdentity(result.identity);
-  } catch {
-    return operationFailure(correlation, "verification_failed");
-  }
-  completeOperation(correlation);
-  return { txId: result.tx_hash, targetTick: result.target_tick };
+export function requestGlyphTransfer(destination: string, amount: string) {
+  return runGlyphOperation("transfer", async () => {
+    const account = readAccount();
+    if (!account) throw new Error("Connect Glyph Wallet before requesting a transfer.");
+    const execution = await requestFromGlyph(
+      createTransferRequest({
+        type: "transfer",
+        dapp: dapp(),
+        to: destination,
+        amount,
+        from: account.identity,
+      }),
+    );
+    const { result, correlation } = execution;
+    if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
+    if (result.status !== "signed" || result.type !== "transfer") {
+      return operationFailure(correlation, "invalid_response");
+    }
+    try {
+      assertSameIdentity(result.identity, account.identity);
+      assertValidIdentity(result.identity);
+    } catch {
+      return operationFailure(correlation, "verification_failed");
+    }
+    completeOperation(correlation);
+    return { txId: result.tx_hash, targetTick: result.target_tick };
+  });
 }
 
 /** Request one caller-defined smart-contract action through signed Relay v2. */
-export async function requestGlyphScCall(input: GlyphScCallInput) {
-  const account = readAccount();
-  if (!account) throw new Error("Connect Glyph Wallet before requesting a smart-contract call.");
-  const execution = await requestFromGlyph(createGlyphScCallRequestForAccount(input, account));
-  const { result, correlation } = execution;
-  if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
-  if (result.status !== "signed" || result.type !== "sc_call") {
-    return operationFailure(correlation, "invalid_response");
-  }
-  try {
-    assertSameIdentity(result.identity, account.identity);
-    assertValidIdentity(result.identity);
-  } catch {
-    return operationFailure(correlation, "verification_failed");
-  }
-  completeOperation(correlation);
-  return { txId: result.tx_hash, targetTick: result.target_tick };
+export function requestGlyphScCall(input: GlyphScCallInput) {
+  return runGlyphOperation("sc_call", async () => {
+    const account = readAccount();
+    if (!account) throw new Error("Connect Glyph Wallet before requesting a smart-contract call.");
+    const execution = await requestFromGlyph(createGlyphScCallRequestForAccount(input, account));
+    const { result, correlation } = execution;
+    if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
+    if (result.status !== "signed" || result.type !== "sc_call") {
+      return operationFailure(correlation, "invalid_response");
+    }
+    try {
+      assertSameIdentity(result.identity, account.identity);
+      assertValidIdentity(result.identity);
+    } catch {
+      return operationFailure(correlation, "verification_failed");
+    }
+    completeOperation(correlation);
+    return { txId: result.tx_hash, targetTick: result.target_tick };
+  });
 }
 
-export async function requestGlyphVerification(message: string, signatureHex: string) {
-  const account = readAccount();
-  if (!account) throw new Error("Connect Glyph Wallet before verifying a signature.");
-  const execution = await requestFromGlyph(
-    createVerifyMessageRequest({
-      type: "verify_message",
-      dapp: dapp(),
-      message,
-      signature: bytesToBase64(fromHex(signatureHex)),
-      public_key: bytesToBase64(identityToPublicKey(account.identity)),
-    }),
-  );
-  const { result, correlation } = execution;
-  if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
-  if (result.status !== "verified") {
-    return operationFailure(correlation, "invalid_response");
-  }
-  try {
-    assertSameIdentity(result.identity, account.identity);
-    assertValidIdentity(result.identity);
-  } catch {
-    return operationFailure(correlation, "verification_failed");
-  }
-  completeOperation(correlation);
-  return result.valid;
+export function requestGlyphVerification(message: string, signatureHex: string) {
+  return runGlyphOperation("verify_message", async () => {
+    const account = readAccount();
+    if (!account) throw new Error("Connect Glyph Wallet before verifying a signature.");
+    const execution = await requestFromGlyph(
+      createVerifyMessageRequest({
+        type: "verify_message",
+        dapp: dapp(),
+        message,
+        signature: bytesToBase64(fromHex(signatureHex)),
+        public_key: bytesToBase64(identityToPublicKey(account.identity)),
+      }),
+    );
+    const { result, correlation } = execution;
+    if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
+    if (result.status !== "verified") {
+      return operationFailure(correlation, "invalid_response");
+    }
+    try {
+      assertSameIdentity(result.identity, account.identity);
+      assertValidIdentity(result.identity);
+    } catch {
+      return operationFailure(correlation, "verification_failed");
+    }
+    completeOperation(correlation);
+    return result.valid;
+  });
 }
 
 export const glyphConnector: WalletConnector = {
   id: "glyph-wallet",
   isAvailable: () => typeof window !== "undefined",
-  async connect() {
-    const execution = await requestFromGlyph(
-      createConnectRequest({ type: "connect", dapp: dapp(), permissions }),
-    );
-    const { result, correlation } = execution;
-    if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
-    if (result.status !== "connected") return operationFailure(correlation, "invalid_response");
-    try {
-      assertValidIdentity(result.identity);
-      assertPermissionsGranted(result.permissions);
-    } catch {
-      return operationFailure(correlation, "verification_failed");
-    }
-    const account: WalletAccount = {
-      identity: result.identity as Identity,
-      name: "Glyph Wallet",
-    };
-    completeOperation(correlation);
-    saveAccount(account);
-    emit("accountChanged", account);
-    return account;
+  connect() {
+    return runGlyphOperation("connect", async () => {
+      const execution = await requestFromGlyph(
+        createConnectRequest({ type: "connect", dapp: dapp(), permissions }),
+      );
+      const { result, correlation } = execution;
+      if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
+      if (result.status !== "connected") return operationFailure(correlation, "invalid_response");
+      try {
+        assertValidIdentity(result.identity);
+        assertPermissionsGranted(result.permissions);
+      } catch {
+        return operationFailure(correlation, "verification_failed");
+      }
+      const account: WalletAccount = {
+        identity: result.identity as Identity,
+        name: "Glyph Wallet",
+      };
+      completeOperation(correlation);
+      saveAccount(account);
+      emit("accountChanged", account);
+      return account;
+    });
   },
   async getAccount() {
     return readAccount();
@@ -934,39 +972,41 @@ export const glyphConnector: WalletConnector = {
   async signTransaction() {
     return unsupported();
   },
-  async signMessage(message: string): Promise<SignMessageResult> {
-    const account = readAccount();
-    if (!account) throw new Error("Connect Glyph Wallet before signing a message.");
-    const execution = await requestFromGlyph(
-      createSignMessageRequest({
-        type: "sign_message",
-        dapp: dapp(),
-        message,
-        from: account.identity,
-      }),
-    );
-    const { result, correlation } = execution;
-    if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
-    if (result.status !== "signed" || result.type !== "sign_message") {
-      return operationFailure(correlation, "invalid_response");
-    }
-    let signatureBytes: Uint8Array;
-    try {
-      assertSameIdentity(result.identity, account.identity);
-      assertValidIdentity(result.identity);
-    } catch {
-      return operationFailure(correlation, "verification_failed");
-    }
-    try {
-      signatureBytes = base64ToBytes(result.signature);
-    } catch {
-      return operationFailure(correlation, "invalid_response");
-    }
-    completeOperation(correlation);
-    return {
-      signatureHex: toHex(signatureBytes),
-      digestHex: toHex(k12(new TextEncoder().encode(message), 32)),
-    };
+  signMessage(message: string): Promise<SignMessageResult> {
+    return runGlyphOperation("sign_message", async () => {
+      const account = readAccount();
+      if (!account) throw new Error("Connect Glyph Wallet before signing a message.");
+      const execution = await requestFromGlyph(
+        createSignMessageRequest({
+          type: "sign_message",
+          dapp: dapp(),
+          message,
+          from: account.identity,
+        }),
+      );
+      const { result, correlation } = execution;
+      if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
+      if (result.status !== "signed" || result.type !== "sign_message") {
+        return operationFailure(correlation, "invalid_response");
+      }
+      let signatureBytes: Uint8Array;
+      try {
+        assertSameIdentity(result.identity, account.identity);
+        assertValidIdentity(result.identity);
+      } catch {
+        return operationFailure(correlation, "verification_failed");
+      }
+      try {
+        signatureBytes = base64ToBytes(result.signature);
+      } catch {
+        return operationFailure(correlation, "invalid_response");
+      }
+      completeOperation(correlation);
+      return {
+        signatureHex: toHex(signatureBytes),
+        digestHex: toHex(k12(new TextEncoder().encode(message), 32)),
+      };
+    });
   },
   on(event, callback) {
     const eventListeners = listeners.get(event) ?? new Set();
