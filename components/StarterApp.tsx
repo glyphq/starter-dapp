@@ -1,18 +1,17 @@
 "use client";
 
 import {
-  buildQUtilQueryPriceOracleRequest,
-  formatDatetimeLocalUtc,
-  qutilPriceOraclePairs,
-  qutilPriceOracleProviders,
-  validateQUtilPriceOracleInput,
-} from "@/lib/contracts/qutil-price-oracle";
+  buildRandomLotteryBuyTicketRequest,
+  fetchRandomLotteryPreflight,
+  formatRandomLotteryTicketPrice,
+  type RandomLotteryPreflight,
+} from "@/lib/contracts/random-lottery";
 import {
-  pollQUtilOracleConfirmation,
-  pendingQUtilOracleConfirmation,
+  pollRandomLotteryPurchaseConfirmation,
+  pendingRandomLotteryPurchase,
   QUBIC_EXPLORER_TRANSACTION_URL,
-  type QUtilOracleConfirmation,
-} from "@/lib/contracts/qutil-price-oracle-result";
+  type RandomLotteryPurchaseConfirmation,
+} from "@/lib/contracts/random-lottery-result";
 import { identityToPublicKey, k12, verify } from "@qubic.org/crypto";
 import { useWallet } from "@qubic.org/react";
 import Image from "next/image";
@@ -50,12 +49,12 @@ import {
 } from "@/lib/connectors/glyph";
 
 type Theme = "dark" | "light";
-type Flow = "connect" | "qutil-price-oracle" | "sign-verify";
+type Flow = "connect" | "random-lottery" | "sign-verify";
 type Icon = IconSvgElement;
 
 export const referenceFlows = [
   { id: "connect", label: "Connect" },
-  { id: "qutil-price-oracle", label: "Price oracle" },
+  { id: "random-lottery", label: "RandomLottery" },
   { id: "sign-verify", label: "Sign & Verify" },
 ] as const satisfies ReadonlyArray<{ id: Flow; label: string }>;
 
@@ -239,34 +238,31 @@ function RequestStatus({ feedback, preparing }: { feedback: GlyphRequestFeedback
   );
 }
 
-function OracleConfirmationStatus({ confirmation }: { confirmation: QUtilOracleConfirmation | null }) {
+function RandomLotteryPurchaseStatus({ confirmation }: { confirmation: RandomLotteryPurchaseConfirmation | null }) {
   if (!confirmation) return null;
   const explorerUrl = QUBIC_EXPLORER_TRANSACTION_URL(confirmation.transactionId);
 
   return (
-    <div className={`oracle-confirmation ${confirmation.state}`} role="status" aria-live="polite">
-      <div className="oracle-confirmation-heading">
+    <div className={`lottery-confirmation ${confirmation.state}`} role="status" aria-live="polite">
+      <div className="lottery-confirmation-heading">
         {confirmation.state === "pending" ? <LoadingIcon /> : null}
         <strong>
           {confirmation.state === "pending"
             ? "Waiting for network confirmation"
             : confirmation.state === "confirmed"
-              ? "Network status indexed"
+              ? "Transaction confirmed"
               : "Archive status unavailable"}
         </strong>
       </div>
       {confirmation.state === "pending" ? (
-        <p>
-          Glyph signed the call. Qubic&apos;s official archive is being checked for its oracle status event.
-          {confirmation.queryId ? <> Query ID <code>{confirmation.queryId}</code> remains pending external oracle fulfillment.</> : null}
-        </p>
+        <p>Glyph signed the BuyTicket call. The official Qubic archive is being checked.</p>
       ) : confirmation.state === "confirmed" ? (
         <>
-          <div className="oracle-confirmation-data">
-            <span>Oracle query ID</span><code>{confirmation.queryId}</code>
-            <span>Archive status code</span><code>{confirmation.queryStatus}</code>
+          <div className="lottery-confirmation-data">
+            {confirmation.tickNumber !== undefined && <><span>Confirmed tick</span><code>{confirmation.tickNumber}</code></>}
+            {confirmation.moneyFlew !== undefined && <><span>Archive money-flow signal</span><code>{confirmation.moneyFlew ? "funds moved" : "no funds moved"}</code></>}
           </div>
-          <p>QUtil creates an asynchronous oracle query. The official archive exposes this ID and raw status, not a readable price result, so no price is shown. External oracle fulfillment remains pending.</p>
+          <p>The official archive indexed this empty-payload BuyTicket call. Its public schema does not expose the contract return code, so this app does not claim an accepted or refunded entry.</p>
         </>
       ) : (
         <p>{confirmation.message}</p>
@@ -292,12 +288,10 @@ export function StarterApp() {
   const [signature, setSignature] = useState<string | null>(null);
   const [verificationResult, setVerificationResult] = useState<boolean | null>(null);
   const [activeSignTab, setActiveSignTab] = useState<"sign" | "verify">("sign");
-  const [oracleProvider, setOracleProvider] = useState<string>(qutilPriceOracleProviders[0].id);
-  const [oraclePair, setOraclePair] = useState(`${qutilPriceOraclePairs[0].base}/${qutilPriceOraclePairs[0].quote}`);
-  const [oracleTimestampUtc, setOracleTimestampUtc] = useState(() => formatDatetimeLocalUtc());
-  const [oracleTimeoutSeconds, setOracleTimeoutSeconds] = useState("60");
-  const [oracleConfirmation, setOracleConfirmation] = useState<QUtilOracleConfirmation | null>(null);
-  const oraclePollController = useRef<AbortController | null>(null);
+  const [lotteryPreflight, setLotteryPreflight] = useState<RandomLotteryPreflight | null>(null);
+  const [lotteryPreflightLoading, setLotteryPreflightLoading] = useState(false);
+  const [lotteryConfirmation, setLotteryConfirmation] = useState<RandomLotteryPurchaseConfirmation | null>(null);
+  const lotteryPollController = useRef<AbortController | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
   useEffect(() => {
@@ -314,7 +308,7 @@ export function StarterApp() {
     return () => window.removeEventListener("unhandledrejection", suppressGlyphLaunchAbort, { capture: true });
   }, []);
 
-  useEffect(() => () => oraclePollController.current?.abort(), []);
+  useEffect(() => () => lotteryPollController.current?.abort(), []);
 
   useEffect(() => {
     const onStatus = (event: Event) => {
@@ -460,9 +454,31 @@ export function StarterApp() {
     }
   }
 
-  async function submitQUtilPriceOracleQuery() {
+  const refreshRandomLotteryPreflight = useCallback(async () => {
+    setLotteryPreflightLoading(true);
+    try {
+      const preflight = await fetchRandomLotteryPreflight();
+      setLotteryPreflight(preflight);
+      return preflight;
+    } catch {
+      const unavailable: RandomLotteryPreflight = {
+        state: "unavailable",
+        message: "Live RandomLottery price or selling state is unavailable. Try again shortly.",
+      };
+      setLotteryPreflight(unavailable);
+      return unavailable;
+    } finally {
+      setLotteryPreflightLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (flow === "random-lottery") void Promise.resolve().then(refreshRandomLotteryPreflight);
+  }, [flow, refreshRandomLotteryPreflight]);
+
+  async function buyRandomLotteryTicket() {
     if (wallet.activeConnector?.id !== "glyph-wallet") {
-      setActionError("Connect Glyph Wallet to request this smart-contract call.");
+      setActionError("Connect Glyph Wallet to buy a RandomLottery ticket.");
       return;
     }
     if (!isGlyphRelaySessionReady()) {
@@ -471,50 +487,52 @@ export function StarterApp() {
     }
     setIsBusy(true);
     setActionError(null);
-    oraclePollController.current?.abort();
-    setOracleConfirmation(null);
+    lotteryPollController.current?.abort();
+    setLotteryConfirmation(null);
     try {
-      const query = validateQUtilPriceOracleInput({
-        provider: oracleProvider,
-        pair: oraclePair,
-        timestampUtc: oracleTimestampUtc,
-        timeoutSeconds: oracleTimeoutSeconds,
-      });
-      const { txId, targetTick } = await requestGlyphScCall(buildQUtilQueryPriceOracleRequest(query));
-      const pendingConfirmation = pendingQUtilOracleConfirmation(txId, targetTick);
-      setOracleConfirmation(pendingConfirmation);
+      // Re-read both official live functions at the launch point. The displayed
+      // price is advisory until this check succeeds because state and price can
+      // change between rendering and wallet approval.
+      const preflight = await refreshRandomLotteryPreflight();
+      if (preflight.state !== "open") {
+        throw new Error(preflight.state === "closed"
+          ? "RandomLottery ticket selling is currently closed."
+          : preflight.message);
+      }
+
+      const { txId, targetTick } = await requestGlyphScCall(buildRandomLotteryBuyTicketRequest(preflight.ticketPrice));
+      const pendingConfirmation = pendingRandomLotteryPurchase(txId, targetTick);
+      setLotteryConfirmation(pendingConfirmation);
       const controller = new AbortController();
-      oraclePollController.current = controller;
-      void pollQUtilOracleConfirmation({
+      lotteryPollController.current = controller;
+      void pollRandomLotteryPurchaseConfirmation({
         transactionId: txId,
+        ticketPrice: preflight.ticketPrice,
         targetTick,
         signal: controller.signal,
-        onUpdate: setOracleConfirmation,
+        onUpdate: setLotteryConfirmation,
       }).catch(() => {
         if (!controller.signal.aborted) {
-          setOracleConfirmation({
+          setLotteryConfirmation({
             state: "unavailable",
             transactionId: txId,
             message: "The official Qubic archive could not be read. Check the transaction in Explorer.",
           });
         }
       });
-      toast.success("Oracle query signed", {
-        description: "Waiting for network confirmation. No price is claimed.",
+      toast.success("Lottery purchase signed", {
+        description: "Waiting for official transaction confirmation.",
       });
     } catch (error) {
       const message = error instanceof Error && [
-        "Choose one of the official Price oracle providers shown in the form.",
-        "Choose one of the documented USDT pairs shown in the form.",
-        "Timeout must be a whole number from 1 to 3600 seconds.",
-        "Enter a UTC timestamp in YYYY-MM-DDTHH:mm format.",
-        "Enter a real UTC calendar date and time.",
-        "Choose a timestamp that is not in the future.",
+        "RandomLottery ticket selling is currently closed.",
+        "Live RandomLottery price or selling state is unavailable. Try again shortly.",
+        "RandomLottery returned an invalid live ticket price. No purchase can be requested.",
       ].includes(error.message)
         ? error.message
-        : "The oracle query request was not approved. No chain result is shown.";
+        : "The ticket purchase was not approved. No chain result is shown.";
       setActionError(message);
-      toast.error("Oracle query request failed", { description: message });
+      toast.error("Ticket purchase failed", { description: message });
     } finally {
       setIsBusy(false);
     }
@@ -594,35 +612,23 @@ export function StarterApp() {
               </section>
             )}
 
-            {flow === "qutil-price-oracle" && (
-              <section className="flow-panel" aria-labelledby="qutil-price-oracle-title">
-                <FlowHeading id="qutil-price-oracle-title" title="QUtil price oracle" description="Build the official QUtil QueryPriceOracle request and approve it in Glyph." />
+            {flow === "random-lottery" && (
+              <section className="flow-panel" aria-labelledby="random-lottery-title">
+                <FlowHeading id="random-lottery-title" title="RandomLottery" description="Buy one live-priced ticket through the official RandomLottery contract." />
                 <div className="flow-rule" />
                 <div className="call-intro">
-                  <div><span className="data-label">Contract</span><code>QUtil · index 4</code></div>
-                  <div><span className="data-label">Procedure</span><code>QueryPriceOracle · input type 100</code></div>
-                  <div><span className="data-label">Burned fee</span><code>10 QU attached to the call</code></div>
+                  <div><span className="data-label">Live ticket price</span><code>{lotteryPreflight?.state === "open" || lotteryPreflight?.state === "closed" ? formatRandomLotteryTicketPrice(lotteryPreflight.ticketPrice) : lotteryPreflightLoading ? "Checking live contract…" : "Unavailable"}</code></div>
+                  <div><span className="data-label">Selling state</span><code>{lotteryPreflight?.state === "open" ? "Open" : lotteryPreflight?.state === "closed" ? "Closed" : lotteryPreflightLoading ? "Checking…" : "Unavailable"}</code></div>
+                  <div><span className="data-label">Procedure</span><code>BuyTicket · input type 1 · empty payload</code></div>
                 </div>
-                <form className="task-form" onSubmit={(event) => { event.preventDefault(); void submitQUtilPriceOracleQuery(); }}>
-                  <label htmlFor="oracle-provider">Oracle source
-                    <select id="oracle-provider" value={oracleProvider} onChange={(event) => setOracleProvider(event.target.value)}>
-                      {qutilPriceOracleProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label} · id bytes ({provider.id})</option>)}
-                    </select>
-                  </label>
-                  <label htmlFor="oracle-pair">Currency pair
-                    <select id="oracle-pair" value={oraclePair} onChange={(event) => setOraclePair(event.target.value)}>
-                      {qutilPriceOraclePairs.map((pair) => {
-                        const value = `${pair.base}/${pair.quote}`;
-                        return <option key={value} value={value}>{value} · id bytes ({pair.base}) and ({pair.quote})</option>;
-                      })}
-                    </select>
-                  </label>
-                  <label htmlFor="oracle-timestamp">Timestamp (UTC)<Input id="oracle-timestamp" type="datetime-local" value={oracleTimestampUtc} onChange={(event) => setOracleTimestampUtc(event.target.value)} /></label>
-                  <label htmlFor="oracle-timeout">Timeout seconds<Input id="oracle-timeout" inputMode="numeric" value={oracleTimeoutSeconds} onChange={(event) => setOracleTimeoutSeconds(event.target.value)} /></label>
-                  <p className="contract-call-note">This uses opaque 32-byte QPI id fields for provider and currency tickers. The starter only exposes official provider ids and documented USDT pairs, validates the timestamp and timeout, and attaches exactly 10 QU because the query fee is burned by the protocol.</p>
-                  <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy || wallet.activeConnector?.id !== "glyph-wallet"}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={SecurityCheckIcon} />}{isBusy ? "Waiting for approval…" : "Request Glyph approval"}</Button></div>
-                  {wallet.activeConnector?.id !== "glyph-wallet" && <p className="error-line" role="status">Connect Glyph Wallet for this signed smart-contract request.</p>}
-                  <OracleConfirmationStatus confirmation={oracleConfirmation} />
+                <form className="task-form" onSubmit={(event) => { event.preventDefault(); void buyRandomLotteryTicket(); }}>
+                  <p className="contract-call-note">Paid lottery entry. Buying a ticket transfers the live displayed price to RandomLottery. Selling state and price are checked again immediately before Glyph opens.</p>
+                  <div className="form-actions"><Button className="primary-button" type="submit" disabled={isBusy || lotteryPreflightLoading || lotteryPreflight?.state !== "open" || wallet.activeConnector?.id !== "glyph-wallet"}>{isBusy ? <LoadingIcon /> : <HugeIcon icon={SecurityCheckIcon} />}{isBusy ? "Checking live price…" : "Buy ticket"}</Button></div>
+                  {lotteryPreflight?.state === "closed" && <p className="error-line" role="status">Ticket selling is currently closed. No wallet request can be launched.</p>}
+                  {lotteryPreflight?.state === "unavailable" && <p className="error-line" role="status">{lotteryPreflight.message}</p>}
+                  {wallet.activeConnector?.id !== "glyph-wallet" && <p className="error-line" role="status">Connect Glyph Wallet to buy a ticket.</p>}
+                  <RandomLotteryPurchaseStatus confirmation={lotteryConfirmation} />
+                  <RequestStatus feedback={glyphFeedback} preparing={glyphRelayPreparing} />
                 </form>
               </section>
             )}
