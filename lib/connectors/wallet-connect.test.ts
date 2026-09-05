@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe("starter WalletConnect connector", () => {
-  test("sends qubic_sign with the map-shaped message parameter Qubic Wallet expects", async () => {
+  test("sends qubic_sign with the connected sender and map-shaped message Qubic Wallet expects", async () => {
     const values = new Map<string, string>();
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -64,7 +64,10 @@ describe("starter WalletConnect connector", () => {
         chainId: "qubic:mainnet",
         request: {
           method: "qubic_sign",
-          params: { message: "Map-shaped signing message" },
+          params: {
+            from: "A",
+            message: "Map-shaped signing message",
+          },
         },
       },
     ]);

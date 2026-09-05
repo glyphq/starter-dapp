@@ -66,8 +66,7 @@ type EventCallback = (...args: unknown[]) => void;
 
 /**
  * Qubic WalletConnect connector with the wallet's map-shaped `qubic_sign`
- * parameter. The upstream 1.0 connector sends the message string directly,
- * which Qubic Wallet rejects as a String instead of Map<String, dynamic>.
+ * parameter. Qubic Wallet requires both the message and the connected sender.
  */
 export function createStarterWalletConnectConnector(
   options: WalletConnectConnectorOptions,
@@ -76,6 +75,7 @@ export function createStarterWalletConnectConnector(
   const sessionKey = options.sessionStorageKey ?? "qubic-wc-session";
   const listeners = new Map<WalletConnectorEvent, Set<EventCallback>>();
   let clientPromise: Promise<WalletConnectClient> | null = null;
+  let activeAccount: WalletAccount | null = null;
 
   function emit(event: WalletConnectorEvent, payload?: unknown) {
     for (const callback of listeners.get(event) ?? []) callback(payload);
@@ -112,6 +112,7 @@ export function createStarterWalletConnectConnector(
         .then((client) => {
           const clearSession = () => {
             clearSavedTopic();
+            activeAccount = null;
             emit("disconnect");
           };
           client.on("session_delete", clearSession);
@@ -154,7 +155,10 @@ export function createStarterWalletConnectConnector(
         const session = (await getClient()).session.get(savedTopic);
         if (session) {
           const account = accountFromSession(session);
-          if (account) return account;
+          if (account) {
+            activeAccount = account;
+            return account;
+          }
         }
         clearSavedTopic();
       }
@@ -176,6 +180,7 @@ export function createStarterWalletConnectConnector(
       const account = accountFromSession(session);
       if (!account)
         throw new Error("WalletConnect: no account in session namespaces");
+      activeAccount = account;
       return account;
     },
 
@@ -189,10 +194,12 @@ export function createStarterWalletConnectConnector(
         );
         const account = accounts[0];
         if (!account) return null;
-        return {
+        const resolvedAccount = {
           identity: account.address as Identity,
           ...(account.alias ? { name: account.alias } : {}),
         };
+        activeAccount = resolvedAccount;
+        return resolvedAccount;
       } catch {
         return null;
       }
@@ -201,6 +208,7 @@ export function createStarterWalletConnectConnector(
     async disconnect() {
       const topic = getSavedTopic();
       clearSavedTopic();
+      activeAccount = null;
       if (!topic) return;
       try {
         await (
@@ -226,8 +234,14 @@ export function createStarterWalletConnectConnector(
         transaction,
       ),
 
-    signMessage: (message: string) =>
-      request<SignMessageResult>(walletConnectMethods.sign, { message }),
+    async signMessage(message: string) {
+      const account = activeAccount;
+      if (!account) throw new Error("WalletConnect: no active account");
+      return request<SignMessageResult>(walletConnectMethods.sign, {
+        from: account.identity,
+        message,
+      });
+    },
 
     on(event, callback) {
       const callbacks = listeners.get(event) ?? new Set<EventCallback>();
