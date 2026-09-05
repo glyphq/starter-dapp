@@ -14,7 +14,7 @@ try {
     const resting = await button.evaluate(
       (el) => getComputedStyle(el).boxShadow,
     );
-    assert.notEqual(resting, "none");
+    assert.equal(resting, "none");
     await button.hover();
     const box = await button.boundingBox();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -26,12 +26,12 @@ try {
       const style = getComputedStyle(el);
       return reduced
         ? style.scale === "none" && style.translate === "none"
-        : style.scale === "0.96";
+        : style.scale === "0.98";
     }, reducedMotion === "reduce");
     const pressed = await button.evaluate(
       (el) => getComputedStyle(el).boxShadow,
     );
-    assert.notEqual(pressed, resting);
+    assert.equal(pressed, resting);
     await page.mouse.move(0, 0);
     await page.mouse.up();
     await button.focus();
@@ -55,10 +55,10 @@ try {
     console.log(
       JSON.stringify({
         reducedMotion,
-        raisedAtRest: true,
+        flatAtRest: true,
         pressedFeedback: true,
         keyboardFocusAndActivation: true,
-        disabledNotRaised: true,
+        disabledFlat: true,
       }),
     );
     await context.close();
