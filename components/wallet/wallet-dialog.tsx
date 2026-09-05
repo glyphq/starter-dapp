@@ -15,7 +15,7 @@ import {
   connectorLabel,
 } from "@/lib/connectors/availability";
 import { useWalletSession } from "./wallet-session-provider";
-import { LoadingIcon, RequestStatus } from "./request-status";
+import { LoadingIcon } from "./request-status";
 
 export function WalletDialog() {
   const {
@@ -28,6 +28,11 @@ export function WalletDialog() {
   } = useWalletSession();
   // Client-only availability is evaluated on a deliberate open, not during SSR.
   if (!dialogOpen) return null;
+  const visibleConnectors = wallet.connectors.filter(
+    (connector) =>
+      connector.id === "qubic-extension" ||
+      connectorAvailability(connector, hasWalletConnectProjectId).available,
+  );
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogContent className="wallet-dialog">
@@ -38,7 +43,7 @@ export function WalletDialog() {
           </DialogDescription>
         </DialogHeader>
         <div className="connector-list">
-          {wallet.connectors.map((connector) => {
+          {visibleConnectors.map((connector) => {
             const availability = connectorAvailability(
               connector,
               hasWalletConnectProjectId,
@@ -68,12 +73,6 @@ export function WalletDialog() {
                     />
                   )}
                   <strong>{connectorLabel(connector.id)}</strong>
-                  <span className="availability-label">
-                    {availability.available ? "Available" : "Setup required"}
-                  </span>
-                </span>
-                <span className="wallet-option-description">
-                  {availability.description}
                 </span>
                 {pendingAction && availability.available ? (
                   <LoadingIcon />
@@ -81,11 +80,8 @@ export function WalletDialog() {
               </button>
             );
           })}
-          {wallet.connectors.length === 0 && (
-            <p className="notice">
-              No wallets are configured. Register a connector in
-              lib/connectors/index.ts.
-            </p>
+          {visibleConnectors.length === 0 && (
+            <p className="notice">No wallets available.</p>
           )}
         </div>
         {pairingUri && (
@@ -102,7 +98,7 @@ export function WalletDialog() {
             </p>
           </div>
         )}
-        <RequestStatus />
+
         {pendingAction && (
           <p className="help-text">
             Closing this dialog does not cancel a request already sent to your

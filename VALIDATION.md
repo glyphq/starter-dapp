@@ -85,3 +85,18 @@ and exactly one blocked native launch from the first provider click, reusing
 the prepared session. It does not contact a real relay or open a real wallet.
 Live end-to-end native approval remains unverified. Slow/failed preparation keeps
 the explicit retry-click fallback rather than launching outside a user gesture.
+
+## Account modal and minimal chooser
+
+The chooser now hides unconfigured Glyph/WalletConnect entries and shows absent
+extensions as disabled rows without setup labels or descriptions. Four real
+production viewport/theme checks pass with zero serious/critical axe issues.
+The connected header control opens an account modal rather than a dropdown.
+
+The extended `qa-wallet-boundary.mjs` uses explicitly synthetic extension and RPC
+responses with the installed provider/query stack. Observed: exact large bigint
+QU balance, complete identity, SVG avatar, clipboard equality, mobile dialog
+without horizontal overflow, zero serious/critical axe findings, Escape focus
+restoration, and disconnect clearing session. It also retains rejection/retry
+coverage. Balance loading uses the real RPC client in production, but this fixture
+is not evidence of a live balance response or native wallet approval.

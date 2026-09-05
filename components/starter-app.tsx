@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useLotteryPurchase } from "@/hooks/use-lottery-purchase";
 import { useTheme } from "@/hooks/use-theme";
 import { useWalletSession } from "@/components/wallet/wallet-session-provider";
-import { AccountMenu } from "@/components/wallet/account-menu";
+import { AccountDialog } from "@/components/wallet/account-dialog";
 import { ConnectScreen } from "@/components/wallet/connect-screen";
 import { WalletDialog } from "@/components/wallet/wallet-dialog";
 import { RequestStatus } from "@/components/wallet/request-status";
@@ -23,13 +23,8 @@ type Flow = (typeof referenceFlows)[number]["id"];
 
 /** Composition only: each screen owns its own form, request inputs and results. */
 export function StarterApp() {
-  const {
-    wallet,
-    pendingAction,
-    dialogOpen,
-    openWalletDialog,
-    dismissFeedback,
-  } = useWalletSession();
+  const { wallet, pendingAction, openWalletDialog, dismissFeedback } =
+    useWalletSession();
   const { theme, toggleTheme } = useTheme();
   const purchaseState = useLotteryPurchase();
   const [flow, setFlow] = useState<Flow>("connect");
@@ -77,7 +72,7 @@ export function StarterApp() {
             {theme === "dark" ? <SunIcon /> : <MoonIcon />}
           </Button>
           {wallet.account && wallet.activeConnector ? (
-            <AccountMenu key={sessionKey} />
+            <AccountDialog key={sessionKey} />
           ) : (
             <Button variant="outline" onClick={openWalletDialog}>
               Connect wallet
@@ -90,8 +85,8 @@ export function StarterApp() {
           <span className="eyebrow">Qubic developer reference</span>
           <h1>Wallet playground.</h1>
           <p>
-            Connect your wallet. Try a signature. Explore a contract.
-            Your keys stay with you.
+            Connect your wallet. Try a signature. Explore a contract. Your keys
+            stay with you.
           </p>
         </div>
         <nav className="flow-nav" aria-label="Reference flows">
@@ -110,7 +105,7 @@ export function StarterApp() {
           ))}
         </nav>
         <div className="flow-stage" key={sessionKey}>
-          {!dialogOpen && <RequestStatus />}
+          <RequestStatus />
           {flow === "connect" && <ConnectScreen onNavigate={navigate} />}
           {flow === "random-lottery" && (
             <RandomLotteryScreen purchaseState={purchaseState} />

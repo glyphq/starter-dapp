@@ -83,7 +83,9 @@ canonical HTTPS origin without a path, query, or fragment. When absent or blank,
 the current browser origin is used. An explicit override must match the page
 origin. There is no demo-origin fallback. Local HTTP browsing and extension
 flows still work, but Glyph requires a public HTTPS deployment or tunnel.
-The connector chooser explains missing configuration before preparing a relay.
+The connector chooser hides unconfigured options and disables missing browser
+extensions without showing setup instructions. Deployment requirements belong here,
+not in the user-facing chooser.
 
 Both variables are client-visible configuration. They are not places for
 private keys, API tokens, relay capabilities, callback URLs, or wallet session

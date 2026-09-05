@@ -45,13 +45,12 @@ for (const viewport of [
   );
   const dialogVisible = await page.getByRole("dialog").isVisible();
   if (new URL(baseUrl).protocol === "http:") {
-    const originGuidance = await page.getByText("Requires a public HTTPS origin.", { exact: false }).isVisible();
-    const glyphChoices = await page.getByRole("button", { name: "Glyph Wallet unavailable", exact: true }).count();
-    const glyphDisabled = glyphChoices === 1 && await page.getByRole("button", { name: "Glyph Wallet unavailable", exact: true }).isDisabled();
-    observations.push({ viewport: viewport.name, screen: "local-connector-choice", originGuidance, glyphChoices, glyphDisabled, relayRequestCount: relayRequests.length });
-    if (!originGuidance || !glyphDisabled || relayRequests.length !== 0) {
-      failures.push({ viewport: `${viewport.name}-local-origin`, originGuidance, glyphChoices, glyphDisabled, relayRequestCount: relayRequests.length });
-    }
+    const dialog = page.getByRole("dialog");
+    const glyphChoices = await dialog.getByRole("button", { name: /Glyph Wallet/ }).count();
+    const extensionDisabled = await dialog.getByRole("button", { name: "Qubic Extension unavailable", exact: true }).isDisabled();
+    const setupDetails = await dialog.getByText(/Setup required|Requires a public HTTPS|NEXT_PUBLIC|Install and enable/).count();
+    observations.push({ viewport: viewport.name, screen: "minimal-connectors", glyphChoices, extensionDisabled, setupDetails, relayRequestCount: relayRequests.length });
+    if (glyphChoices !== 0 || !extensionDisabled || setupDetails !== 0 || relayRequests.length !== 0) failures.push({ viewport: viewport.name, glyphChoices, extensionDisabled, setupDetails });
   }
   await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/connectors.png`, fullPage: true });
   if (!dialogVisible || dialogSerious.length) {
