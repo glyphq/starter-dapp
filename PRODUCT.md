@@ -1,94 +1,61 @@
-# Qubic Starter DApp
+# Glyph Starter
 
 ## Product definition
 
-Qubic Starter DApp is a compact reference implementation for connecting Qubic
-wallets from a Next.js application. It demonstrates the shared
-`@qubic.org/react` provider and connector contract, while keeping the
-Glyph-specific Relay v2 adapter behind a separate seam.
-
-It is meant to be copied as a starting point, inspected while integrating a
-wallet, or reduced to the connector paths an application actually supports.
-It is not a finished wallet product or a general-purpose transaction SDK.
+Glyph Starter is a compact Qubic wallet-integration reference for Next.js. It
+shows a small, task-first surface for common wallet behavior and two selected
+smart-contract examples. It is meant to be copied and adapted, not used as a
+general-purpose contract dashboard or transaction SDK.
 
 ## Audience
 
 Qubic application developers who need a working baseline for:
 
-- connector selection and explicit availability states;
-- account connect, restore, and disconnect flows;
-- wallet-approved RandomLottery purchases and message signing; and
-- local or wallet-assisted signature verification.
+- explicit connector availability, connect, restore, and disconnect behavior;
+- account details with identity, identicon, and live balance;
+- message signing and verification; and
+- reviewed QEarn and QUtil queries and procedures.
 
 ## Included reference paths
 
 | Path | Current behavior |
 | --- | --- |
-| Qubic browser extension | Uses the injected provider exposed by `@qubic.org/react`. |
-| WalletConnect | Uses QR pairing and requires `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`. |
-| Glyph Wallet | Uses a desktop deep link and Relay v2 session. Glyph requests are explicitly bound to `qubic:mainnet`. |
+| Qubic browser extension | Uses the injected provider through `@qubic.org/react`. |
+| WalletConnect | Uses QR pairing when a public project ID is configured and sends Qubic Wallet's expected map-shaped signing input. |
+| Glyph Wallet | Uses an explicit Relay v2 desktop request bound to `qubic:mainnet`. |
+| Sign & Verify | Gates message actions behind a connected wallet and keeps approval in the wallet. |
+| QEarn | Reads protocol stats or prepares the generated `Lock` procedure. |
+| QUtil | Reads protocol fees or prepares the generated `Vote` procedure. |
 
-The connector registry is intentionally small. A consuming application should
-remove connectors it does not want to support instead of presenting them as
-available by default.
+## Contract examples
 
-## Core workflows
+The contract selector is intentionally constrained to QEarn and QUtil. It
+contains a small action selector per contract rather than all deployed
+contracts or a raw ABI form.
 
-1. Choose a connector and connect an account.
-2. Inspect the active identity and disconnect it.
-3. Review a live RandomLottery ticket price, then explicitly request Glyph approval.
-4. Ask the wallet to sign a message.
-5. Verify a signature against the connected identity.
+- Queries use the live RPC client and need no wallet approval.
+- Procedures use generated `@qubic.org/contracts` builders and validate whole
+  numbers before a wallet request.
+- QEarn `Lock QU` attaches the entered QU amount.
+- QUtil `Vote in a poll` uses the connected identity and carries its vote amount
+  in the generated payload, while attaching zero QU.
+- The exact transaction still appears in the user's wallet for approval.
 
-The shared connector contract is the default integration seam. Glyph transfer,
-signing, and verification use its native request builders because its wallet
-callbacks do not map every operation to the shared transaction method. The
-reference UI therefore keeps those Glyph operations explicit rather than
-pretending that every connector has identical capabilities.
-
-## Customization points
-
-- `app/page.tsx`: replace the reference route entry.
-- `components/starter-app.tsx`: compose the shell and feature screens.
-- `components/app-providers.tsx`: configure providers, the live client, and local
-  connector persistence.
-- `lib/connectors/index.ts`: register or remove connector instances and keep
-  optional configuration client-safe.
-- `lib/connectors/glyph.ts`: keep, replace, or remove the Glyph adapter.
-- `app/globals.css`: replace presentation without changing wallet semantics.
-- `app/layout.tsx`: set the consuming app's fonts and metadata.
-
-## Security boundaries
-
-- Wallets own approval. The dApp can prepare a request, but it cannot approve
-  a transfer or sign a message for the user.
-- `NEXT_PUBLIC_*` values are embedded in the browser. The starter has no
-  server-side secret configuration. Never place private keys, API tokens,
-  callback URLs, relay capabilities, or wallet session secrets in them.
-- The Glyph adapter accepts callbacks only after signed-response checks bind
-  them to the expected request, account, dApp origin, relay session, and
-  `qubic:mainnet` network. Recovery is bounded, and retry creates a fresh
-  session and request.
-- Relay capabilities and signed payloads stay inside the connector flow. Safe
-  diagnostics are allow-listed and exclude callback URLs, proof material,
-  identities, user input, and raw errors.
-- Browser persistence is convenience state, not key storage or proof of wallet
-  authorization. Disconnect and callback verification remain explicit.
-
-## Non-goals
+## Product constraints
 
 - No private-key management or signing outside a connected wallet.
-- No general contract dashboard, application backend, or server callback API.
-- No claim that an unavailable or unconfigured connector is supported at
-  runtime.
-- No universal transaction abstraction when a connector exposes a
-  wallet-specific request path.
+- No generic contract index, input-type, or binary-payload form.
+- No automatic wallet launch after asynchronous preparation.
+- No claim that an unavailable connector works at runtime.
+- No claim that a mocked browser fixture establishes a real on-chain approval.
 
-## Product character
+## Character
 
-Minimal, inspectable, technically honest, and easy to adapt. UI copy should
-name the connector and its requirement, keep approval in the wallet, and make
-failure and retry behavior visible without exposing sensitive protocol data.
+Minimal, tactile, and inspectable. The hero gives direct access to three useful
+starter tasks. Dialogs are compact, their selectors hold a stable full width,
+and no redundant footer, status card, or cancel action competes with the task.
+Transient request feedback uses global toasts, while durable signed and query
+outputs remain in the task that produced them.
 
-Qubic Starter DApp is independent software built for the Qubic network. It is
-not an official Qubic organization.
+Glyph Starter is independent software built for the Qubic network. It is not an
+official Qubic organization.

@@ -1,71 +1,77 @@
 # Interface and state design
 
-## Two task-first examples
+## Three focused tasks
 
-Sign & Verify and RandomLottery share a compact shell, wallet chooser,
-account details modal, and persistent theme. The UI uses local Geist fonts, monochrome
-surfaces, readable state labels, keyboard focus, and responsive action groups.
-Unconfigured connectors are hidden. Missing extensions remain disabled, without
-setup labels or technical descriptions.
-Opening the chooser on valid HTTPS starts background relay preparation, never
-a wallet launch. Connected Glyph sessions are replenished between actions.
-Each provider is one keyboard-accessible row, not a row with a separate button.
+The full-viewport hero exposes three direct CTAs: **Sign & Verify**, **QEarn**,
+and **QUtil**. Each CTA opens a compact dialog instead of rendering a permanent
+card or navigation surface. The dialog close control and Escape key are the
+only dismissal affordances. There is no redundant Cancel action.
+
+QEarn and QUtil share one contract example screen. The initial hero CTA selects
+the relevant contract, then the screen's full-width Contract and Action
+selectors allow the user to switch between the two reviewed contracts.
 
 ## Ownership
 
-- `components/starter-app.tsx`: navigation and composition, not request logic.
+- `components/starter-app.tsx`: shell, hero CTAs, modal state, account header.
 - `components/wallet/wallet-session-provider.tsx`: shared connection state,
-  synchronous request lock, safe feedback, and relay preparation.
-- `components/signatures/`: message fields and signature validation/results.
-- `components/random-lottery/`: live price, short-lived review, explicit approval.
-- `hooks/use-lottery-purchase.ts`: archive tracking independent of screen lifetime.
-- `lib/`: connector protocols, pure validation, contract encoding and queries.
+  single-flight request lock, safe feedback, and Glyph relay preparation.
+- `components/wallet/request-status.tsx`: maps shared wallet progress and
+  transient outcomes to global toasts.
+- `components/signatures/signatures-screen.tsx`: signing, verification, and
+  result state.
+- `components/contract-call/contract-examples-screen.tsx`: contract/action
+  selection, query result state, procedure inputs, and submission state.
+- `lib/contracts/starter-contracts.ts`: reviewed contract metadata, generated
+  typed builders, numeric validation, and payload conversion.
+- `lib/connectors/glyph.ts`: signed Glyph Relay v2 request boundary.
 
-Account-keyed feature screens reset form results on account changes. Purchase
-tracking retains the submitting identity across navigation and account changes,
-but does not survive a full page reload. Do not move it into a conditional screen.
+Feature screens own their temporary fields and results. The shell does not own
+contract inputs or wallet requests.
 
-## Interaction constraints
+## Feedback
 
-Preparation never automatically resumes a wallet action. A deliberate subsequent
-click preserves the browser gesture for a native launch. Lottery review captures
-price and account, expires after 30 seconds, and precedes a separate wallet click.
-An installed provider may report a connection error in state without rejecting
-its promise. Only an observed account transition establishes connection success.
+Transient updates and errors never consume modal layout. Connection progress,
+wallet outcomes, copy feedback, validation errors, and query updates use the
+shared toast region. Durable artifacts remain in their task: a signed message
+stays available for copy or verification, and a read-only contract response
+stays available for inspection.
 
-Keys, callback capabilities, signed protocol payloads, and raw errors never belong
-in UI diagnostics. Mainnet approval remains in the wallet. Source paths use
-kebab-case, component symbols use PascalCase. Prefer feature-local code over a
-new framework, generic state machine, or redundant data store.
+## Procedure gate
 
-## Flat workspace iteration
+Read-only QEarn and QUtil queries remain usable without an account. Choosing a
+procedure while disconnected presents exactly one primary action: **Connect
+wallet**. It does not render procedure inputs or a submit control until the
+connection succeeds.
 
-The main workspace uses open sections and underline navigation rather than
-rounded container cards. Account, price, result, and connector details use ruled
-rows. Dialogs and editable inputs remain contained. This is a presentation-only
-change, with no changes to wallet request behavior.
+Once connected, QEarn `Lock QU` accepts a whole attached-QU amount. QUtil
+`Vote in a poll` accepts a poll ID, option, and contract-defined vote amount.
+The connected identity is supplied by the wallet, never typed by the user. All
+ABI encoding comes from `@qubic.org/contracts`; no UI field represents a raw
+payload or contract index.
 
-The connected header control opens `account-dialog.tsx`: full public identity,
-wallet name, mainnet, live QU balance and its tick, refresh, copy, and disconnect.
-Balance queries run only while open and retain bigint precision. Failed loads
-show unavailable, never a fabricated zero. The identicon uses the same
-boring-avatars marble variant and palette as Glyph wallet, seeded by identity.
+## Wallet and relay constraints
 
-## Minimal shell
+Preparation never resumes a wallet action automatically. Opening the chooser on
+a valid HTTPS page can register a Glyph Relay session in the background, but it
+never launches a wallet. A deliberate action launches the wallet when ready or
+asks for one repeat click after preparation.
 
-The shell omits the marketing hero, duplicate example links and repeated account
-summary. Account management stays in the header modal. The connection screen is
-one prompt and action. Header/footer accents use static CSS dot patterns with
-gradient masks, no effects dependency or animation. Decorations do not intercept
-pointer input and are hidden in forced-color mode. Contract approval and price
-review warnings remain intact.
+The browser extension and WalletConnect use their `sendTransaction` capability.
+Glyph uses its native signed `sc_call` request. Requests stay bound to mainnet
+and account identity. Mainnet approval remains in the wallet.
 
-## Task-first progression
+The local WalletConnect adapter sends signing input as `{ message }` because
+Qubic Wallet expects a map for `qubic_sign`. This is a narrow protocol bridge,
+not a second signing path or a fallback that could duplicate a request.
 
-Sign & Verify is the entry screen. Users can draft a message before connecting.
-Connection does not discard the draft or automatically request a signature.
-After signing, Verify this signature transfers the exact output into the verify
-form. Results remain bound to the submitting account, including late responses.
-Drafts reset when switching examples or reloading, not when connecting.
-The separate Connect landing page is removed. RandomLottery remains an explicit
-paid mainnet example with unchanged review and approval checks.
+## Visual and accessibility constraints
+
+The full-bleed Plasma hero is decorative and disabled under reduced motion.
+Buttons retain tactile raised and pressed states with keyboard focus. Task
+dialogs are bounded to 480px on desktop, responsive on mobile, and their
+content, selectors, and action controls use the same available width. Dialogs,
+forms, and selector changes must retain zero serious or critical axe findings.
+
+Source paths use kebab-case. Component symbols use PascalCase. Prefer
+feature-local code to a generic state machine or redundant data store.
