@@ -17,7 +17,7 @@ Qubic application developers who need a working baseline for:
 
 - connector selection and explicit availability states;
 - account connect, restore, and disconnect flows;
-- wallet-approved transfers and message signing; and
+- wallet-approved RandomLottery purchases and message signing; and
 - local or wallet-assisted signature verification.
 
 ## Included reference paths
@@ -36,7 +36,7 @@ available by default.
 
 1. Choose a connector and connect an account.
 2. Inspect the active identity and disconnect it.
-3. Request a transfer from the selected wallet.
+3. Review a live RandomLottery ticket price, then explicitly request Glyph approval.
 4. Ask the wallet to sign a message.
 5. Verify a signature against the connected identity.
 
@@ -49,7 +49,7 @@ pretending that every connector has identical capabilities.
 ## Customization points
 
 - `app/page.tsx`: replace the reference route entry.
-- `components/starter-app.tsx`: replace the demo workspace and action forms.
+- `components/starter-app.tsx`: compose the shell and feature screens.
 - `components/app-providers.tsx`: configure providers, the live client, and local
   connector persistence.
 - `lib/connectors/index.ts`: register or remove connector instances and keep
@@ -78,7 +78,7 @@ pretending that every connector has identical capabilities.
 ## Non-goals
 
 - No private-key management or signing outside a connected wallet.
-- No smart-contract UI, application backend, or server callback API.
+- No general contract dashboard, application backend, or server callback API.
 - No claim that an unavailable or unconfigured connector is supported at
   runtime.
 - No universal transaction abstraction when a connector exposes a

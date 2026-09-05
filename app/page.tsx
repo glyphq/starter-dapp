@@ -1,18 +1,12 @@
 import type { Metadata } from "next";
-import { Space_Grotesk } from "next/font/google";
 import { StarterApp } from "@/components/starter-app";
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-space-grotesk",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "Wallet flows",
-  description: "A concise Qubic workspace for wallet, a simple contract call, and signed message flows.",
+  description:
+    "Connect a Qubic wallet, sign and verify messages, or review a real contract request.",
 };
 
 export default function Home() {
-  return <div className={`${spaceGrotesk.variable} starter-font`}><StarterApp /></div>;
+  return <StarterApp />;
 }

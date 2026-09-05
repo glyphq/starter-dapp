@@ -116,6 +116,20 @@ account for convenience, but it is not a secret store and it does not replace
 wallet or callback verification. Add a server only for an application-specific
 need, with a separate threat model and server-side secret handling.
 
+## Architecture
+
+Source filenames use kebab-case. React component symbols remain PascalCase.
+The shell composes feature screens. `wallet-session-provider.tsx` coordinates
+connection state, request locking, safe feedback, and deliberate Glyph preparation.
+Feature screens own forms and temporary results. Account changes reset those forms.
+`use-lottery-purchase.ts` keeps signed-purchase tracking alive across navigation
+and account changes, retaining the submitting identity. It does not persist on reload.
+Pure validation and contract review rules live in `lib/`, not in UI components.
+
+Lottery purchases have separate **Review ticket** and **Open Glyph Wallet** steps.
+Reviews expire after 30 seconds and are bound to the reviewed price and identity.
+The final click performs no asynchronous preflight before native launch.
+
 ## Customize the starter
 
 Use the existing seams rather than copying wallet-specific behavior into the
@@ -124,8 +138,11 @@ page:
 | File | Customization point |
 | --- | --- |
 | `app/page.tsx` | Replace the reference screen with the application's route entry. |
-| `components/starter-app.tsx` | Change the wallet workspace, forms, and action orchestration. |
+| `components/starter-app.tsx` | Compose the shell and three feature screens. Keep form state out of the shell. |
 | `components/app-providers.tsx` | Configure `QubicProvider`, `WalletProvider`, the live client, and the browser storage key. |
+| `components/wallet/wallet-session-provider.tsx` | Coordinate shared requests and connection feedback. |
+| `components/signatures/signatures-screen.tsx` | Adapt message signing and verification. |
+| `components/random-lottery/random-lottery-screen.tsx` | Adapt explicit contract review and approval. |
 | `lib/connectors/index.ts` | Register, remove, or configure connector instances. Keep optional configuration client-safe. |
 | `lib/connectors/glyph.ts` | Keep or replace the isolated Glyph Relay v2 adapter and its native transfer/sign/verify requests. |
 | `app/globals.css` | Replace the reference visual system without changing connector behavior. |
@@ -139,7 +156,7 @@ connector does.
 
 ### Start with one action
 
-For message signing, follow `signMessage()` in `components/starter-app.tsx`:
+For message signing, follow `signMessage()` in `components/signatures/signatures-screen.tsx`:
 
 1. Read the connected account and connector with `useWallet()`.
 2. For Glyph, check `isGlyphRelaySessionReady()`. If it is not ready, prepare
@@ -161,11 +178,11 @@ in the UI.
   `lib/connectors/index.ts`. Remove its construction, imports, and configuration
   if no longer used. The chooser only explains registered connectors.
 - **Glyph entirely:** also remove Glyph-specific readiness/status handling and
-  imports from `StarterApp.tsx`. Replace or remove RandomLottery, which requires
+  imports from `components/wallet/wallet-session-provider.tsx`. Replace or remove RandomLottery, which requires
   Glyph. Then delete the adapter and its tests, and remove `@glyph-oss/connect`
   after replacing the shared origin validator used by WalletConnect.
-- **The contract example:** remove the RandomLottery screen, state, polling
-  effect, and imports from `StarterApp.tsx`, then remove `lib/contracts/`.
+- **The contract example:** remove `components/random-lottery/`, `hooks/use-lottery-purchase.ts`, and their
+  composition in `components/starter-app.tsx`, then remove `lib/contracts/`.
   Drop the unused `sc_call` permission and update the permission fixtures.
 - **Unused permissions:** keep the requested permission list and its tests in
   sync. The adapter intentionally checks the exact granted set.
@@ -201,6 +218,8 @@ and mobile navigation, accessibility, and local-origin guidance without
 opening a wallet or submitting a paid request. Unit tests cover signed
 callback validation, rejection, retries, preparation failures, and duplicate
 launches. A real wallet approval round trip still needs separate manual testing.
+`node scripts/qa-wallet-boundary.mjs` additionally checks rejection, retry, and
+disconnect through the installed provider using an explicitly synthetic extension.
 
 ## Static deployment
 
@@ -222,8 +241,12 @@ app/
   layout.tsx           Metadata, fonts, and providers
   page.tsx             Application entry
 components/
-  Providers.tsx        Qubic and wallet providers
-  StarterApp.tsx       Reference wallet workspace
+  app-providers.tsx    Qubic, wallet, and session providers
+  starter-app.tsx      Shell and screen composition
+  wallet/             Session coordination and connection UI
+  signatures/         Message form and signature results
+  random-lottery/     Price review and purchase UI
+hooks/                Theme and navigation-stable purchase tracking
 lib/connectors/
   index.ts             Registered connector set
   glyph.ts             Isolated Glyph Wallet adapter

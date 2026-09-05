@@ -8,10 +8,12 @@ const failures = [];
 const observations = [];
 
 for (const viewport of [
-  { name: "desktop", width: 1440, height: 900 },
-  { name: "mobile", width: 390, height: 844 },
+  { name: "desktop-dark", width: 1440, height: 900, theme: "dark" },
+  { name: "mobile-dark", width: 390, height: 844, theme: "dark" },
+  { name: "desktop-light", width: 1440, height: 900, theme: "light" },
+  { name: "mobile-light", width: 390, height: 844, theme: "light" },
 ]) {
-  const context = await browser.newContext({ viewport });
+  const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height }, colorScheme: viewport.theme });
   const page = await context.newPage();
   const errors = [];
   const relayRequests = [];
@@ -20,6 +22,8 @@ for (const viewport of [
     if (new URL(request.url()).hostname === "relay.glyphq.org") relayRequests.push(request.url());
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
+  const brokenImages = await page.locator("img").evaluateAll((images) => images.filter((image) => !image.complete || image.naturalWidth === 0).length);
+  if (brokenImages) failures.push({ viewport: viewport.name, brokenImages });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   const results = await new AxeBuilder({ page }).analyze();
   const serious = results.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""));
@@ -41,11 +45,12 @@ for (const viewport of [
   );
   const dialogVisible = await page.getByRole("dialog").isVisible();
   if (new URL(baseUrl).protocol === "http:") {
-    const originGuidance = await page.getByText("Glyph requires a public HTTPS origin.", { exact: false }).isVisible();
-    const glyphChoices = await page.getByRole("button", { name: /Glyph Wallet/ }).count();
-    observations.push({ viewport: viewport.name, screen: "local-connector-choice", originGuidance, glyphChoices, relayRequestCount: relayRequests.length });
-    if (!originGuidance || glyphChoices !== 0 || relayRequests.length !== 0) {
-      failures.push({ viewport: `${viewport.name}-local-origin`, originGuidance, glyphChoices, relayRequestCount: relayRequests.length });
+    const originGuidance = await page.getByText("Requires a public HTTPS origin.", { exact: false }).isVisible();
+    const glyphChoices = await page.getByRole("button", { name: "Glyph Wallet unavailable", exact: true }).count();
+    const glyphDisabled = glyphChoices === 1 && await page.getByRole("button", { name: "Glyph Wallet unavailable", exact: true }).isDisabled();
+    observations.push({ viewport: viewport.name, screen: "local-connector-choice", originGuidance, glyphChoices, glyphDisabled, relayRequestCount: relayRequests.length });
+    if (!originGuidance || !glyphDisabled || relayRequests.length !== 0) {
+      failures.push({ viewport: `${viewport.name}-local-origin`, originGuidance, glyphChoices, glyphDisabled, relayRequestCount: relayRequests.length });
     }
   }
   await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/connectors.png`, fullPage: true });
@@ -55,26 +60,30 @@ for (const viewport of [
   observations.push({ viewport: viewport.name, screen: "connector-dialog", visible: dialogVisible, seriousAccessibilityIssues: dialogSerious.length });
 
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "RandomLottery" }).click();
+  const dialogClosed = await page.getByRole("dialog").count() === 0;
+  const focusRestored = await page.getByRole("button", { name: "Connect wallet", exact: true }).evaluate((element) => element === document.activeElement);
+  observations.push({ viewport: viewport.name, check: "dialog-keyboard-dismiss", dialogClosed, focusRestored });
+  if (!dialogClosed || !focusRestored) failures.push({ viewport: viewport.name, dialogClosed, focusRestored });
+  await page.getByRole("navigation", { name: "Reference flows" }).getByRole("button", { name: /RandomLottery/ }).click();
   await page.getByRole("heading", { name: "RandomLottery" }).waitFor();
   const ticketPrice = page.getByText("Live ticket price");
-  const buyButton = page.getByRole("button", { name: "Buy ticket" });
+  const buyButton = page.getByRole("button", { name: "Review ticket" });
   const contractResults = await new AxeBuilder({ page }).analyze();
   const contractSerious = contractResults.violations.filter((violation) =>
     ["serious", "critical"].includes(violation.impact ?? ""),
   );
   await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/contract-call.png`, fullPage: true });
-  observations.push({ viewport: viewport.name, screen: "RandomLottery", ticketPriceVisible: await ticketPrice.isVisible(), buyDisabledWithoutGlyph: await buyButton.isDisabled(), seriousAccessibilityIssues: contractSerious.length });
+  observations.push({ viewport: viewport.name, screen: "RandomLottery", ticketPriceVisible: await ticketPrice.isVisible(), reviewDisabledWithoutGlyph: await buyButton.isDisabled(), seriousAccessibilityIssues: contractSerious.length });
   if (!(await ticketPrice.isVisible()) || !(await buyButton.isDisabled()) || contractSerious.length) {
     failures.push({
       viewport: `${viewport.name}-contract-call`,
       ticketPriceVisible: await ticketPrice.isVisible(),
-      buyDisabledWithoutGlyph: await buyButton.isDisabled(),
+      reviewDisabledWithoutGlyph: await buyButton.isDisabled(),
       serious: contractSerious,
     });
   }
 
-  await page.getByRole("button", { name: "Sign & Verify" }).click();
+  await page.getByRole("navigation", { name: "Reference flows" }).getByRole("button", { name: /Sign & Verify/ }).click();
   await page.getByRole("heading", { name: "Sign & Verify" }).waitFor();
   const walletRequired = await page.getByText("Wallet required", { exact: true }).isVisible();
   const signingControls = await page.getByRole("button", { name: /^(Sign message|Verify signature)$/ }).count();
@@ -86,6 +95,12 @@ for (const viewport of [
   }
   await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/sign-verify.png`, fullPage: true });
   if (errors.length) failures.push({ viewport: `${viewport.name}-runtime`, errors });
+  const targetTheme = viewport.theme === "dark" ? "light" : "dark";
+  await page.getByRole("button", { name: `Switch to ${targetTheme} theme` }).click();
+  await page.reload({ waitUntil: "networkidle" });
+  const persistedTheme = await page.locator("html").getAttribute("data-theme");
+  observations.push({ viewport: viewport.name, check: "theme-persistence", expected: targetTheme, actual: persistedTheme });
+  if (persistedTheme !== targetTheme) failures.push({ viewport: viewport.name, persistedTheme });
   await context.close();
 }
 

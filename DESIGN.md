@@ -1,26 +1,36 @@
-# Qubic Starter DApp
+# Interface and state design
 
-## Direction
+## Three focused flows
 
-Qubic Starter is a compact, reusable wallet workspace for Qubic apps. The visible shell has four focused sections: Overview, Wallet, Transfer, and Sign & Verify. Selecting a section swaps one task surface in place without dashboard filler or marketing copy.
+Connect, RandomLottery, and Sign & Verify share a compact shell, wallet chooser,
+identity menu, and persistent theme. The UI uses local Geist fonts, monochrome
+surfaces, readable state labels, keyboard focus, and responsive action groups.
+Unavailable registered connectors remain visible with setup requirements.
+Opening the chooser never starts a relay session.
 
-Overview shows the active identity, wallet, live QU balance, and three useful next actions. Wallet manages available wallet choices and the active account. Transfer, sign, and verify keep one task per surface and retain the existing secure request handlers.
+## Ownership
 
-## Visual language
+- `components/starter-app.tsx`: navigation and composition, not request logic.
+- `components/wallet/wallet-session-provider.tsx`: shared connection state,
+  synchronous request lock, safe feedback, and relay preparation.
+- `components/signatures/`: message fields and signature validation/results.
+- `components/random-lottery/`: live price, short-lived review, explicit approval.
+- `hooks/use-lottery-purchase.ts`: archive tracking independent of screen lifetime.
+- `lib/`: connector protocols, pure validation, contract encoding and queries.
 
-- Calm monochrome near-black and warm-white themes.
-- Space Grotesk for interface copy and Geist Mono for identities, signatures, transaction IDs, and literal code values.
-- Dense workspace hierarchy with separators, rows, and simple action bars instead of card grids.
-- Generated shadcn Sidebar, Dialog, DropdownMenu, Tabs, Separator, Input, Textarea, Skeleton, Tooltip, Button, and Sonner primitives drive interaction ergonomics.
-- Hugeicons provide navigation, wallet, action, status, and feedback icons. The real Glyph mark is loaded from `public/brand/glyph-mark.png` as a discreet wallet affordance.
-- Theme state persists through `qubic-starter-theme` in local storage and `data-theme` on the document root.
+Account-keyed feature screens reset form results on account changes. Purchase
+tracking retains the submitting identity across navigation and account changes,
+but does not survive a full page reload. Do not move it into a conditional screen.
 
-## Data and states
+## Interaction constraints
 
-The overview balance uses the existing `@qubic.org/react` `useBalance` query backed by the configured Qubic provider. It renders a Skeleton while loading, a compact unavailable state with retry on query failure, and the returned QU balance with its valid tick. No balance, token, history, chart, or network value is fabricated.
+Preparation never automatically resumes a wallet action. A deliberate subsequent
+click preserves the browser gesture for a native launch. Lottery review captures
+price and account, expires after 30 seconds, and precedes a separate wallet click.
+An installed provider may report a connection error in state without rejecting
+its promise. Only an observed account transition establishes connection success.
 
-Account identities, transaction IDs, and signatures remain abbreviated or copyable where appropriate. User-facing failures use short safe messages. Raw connector errors, callback URLs, protocol secrets, and support internals are not primary UI copy.
-
-## Scope
-
-The app owns only UI composition, accessible state presentation, and the generated component layer. Existing connector implementations, request handlers, provider configuration, environment policy, and secure prewarm behavior remain unchanged.
+Keys, callback capabilities, signed protocol payloads, and raw errors never belong
+in UI diagnostics. Mainnet approval remains in the wallet. Source paths use
+kebab-case, component symbols use PascalCase. Prefer feature-local code over a
+new framework, generic state machine, or redundant data store.

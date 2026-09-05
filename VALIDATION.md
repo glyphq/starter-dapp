@@ -40,3 +40,32 @@ but not callback delivery or wallet approval.
 A complete browser → public HTTPS origin → relay → native wallet → signed callback round trip was **not verified**. The local production page was exercised and correctly stops at its HTTPS gate. This session has no configured HTTPS deployment of the modified build or approved test-wallet session. The OS does have a `glyph.desktop` registration pointing to a downloaded AppImage; lack of a binary on PATH is not evidence that Glyph is absent.
 
 No vault was opened, no private key was read, and no wallet approval or paid contract action was performed. Connected signing, real user rejection, native timeout/recovery, and disconnect/reconnect still require manual acceptance with an authorized test wallet. The local UI/build feedback loop is closed; native-wallet integration acceptance remains blocked at these prerequisites. Mock-based tests are explicitly not claimed as its replacement.
+
+## Architecture and UI refactor, 2026-09-05
+
+This section supersedes earlier UI descriptions. Registered unavailable wallets
+are now visible as disabled choices, rather than hidden.
+
+| Requirement / changed output | Check and observed result |
+| --- | --- |
+| Kebab-case source paths | `lib/source-naming.test.ts` scans real app/components/hooks/lib TypeScript filenames. |
+| Small feature boundaries | Shell composes wallet/signature/lottery screens. TypeScript, lint and static production build pass with the installed dependencies. No new runtime dependency was added. |
+| Three focused flows | Built-export Playwright navigates Connect, RandomLottery, Sign & Verify in desktop/mobile and light/dark contexts. All expected screens visible. |
+| Clear connector setup | Actual local page shows disabled Glyph with HTTPS guidance. Opening chooser makes zero relay requests in all four contexts. |
+| Keyboard and accessible UI | Escape closes chooser and restores focus. Axe reports zero serious/critical issues on tested screens and chooser. Home has no horizontal overflow. |
+| Static assets and theme | Brand images load in exported app. Theme toggle survives reload in all four contexts. No observed page errors. |
+| Disconnected safety | Lottery review disabled without Glyph. Signature screen shows Wallet required and no signing controls. |
+| Provider rejection/retry/disconnect | `scripts/qa-wallet-boundary.mjs` uses a synthetic extension with the real installed WalletProvider and production UI. Rejection keeps chooser open with safe error, retry establishes account and closes it, disconnect clears saved connector. Passed. This is not a real wallet approval. |
+| Short-lived exact-price review | Pure review tests reject closed/zero-price contracts, stale/future timestamps, and changed identity, and preserve reviewed amount. Native wallet launch remains a separate explicit click. |
+| Signature input | Pure validation tests cover blank input and malformed signature data. |
+| Purchase lifetime | Stable shell hook owns archive tracking and captured submitting identity outside conditional/account-keyed screens. Reviewed in code, not verified with a live paid transaction. |
+
+Latest acceptance command: `bun run test && bun run build && bun run qa`, followed
+by `node scripts/qa-wallet-boundary.mjs`. Browser QA uses the actual unmocked static
+export for all four viewport/theme contexts. The separate extension fixture is
+explicitly synthetic. Live relay checks in the earlier section are historical,
+not a claim that a native approval was completed after this refactor.
+
+Remaining boundary: end-to-end Glyph/WalletConnect approval, real signatures,
+and paid contract confirmation require an authorized wallet and public HTTPS
+origin. No wallet approval, private-key access, or paid transaction was performed.
