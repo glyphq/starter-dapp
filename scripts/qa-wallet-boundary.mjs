@@ -3,6 +3,13 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
+
+const identity =
+  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA AFXIB".replace(
+    " ",
+    "",
+  );
+
 const browser = await chromium.launch({ headless: true });
 try {
   const context = await browser.newContext();
@@ -13,23 +20,25 @@ try {
       contentType: "application/json",
       body: JSON.stringify({
         balance: {
-          id: "A".repeat(60),
+          id: identity,
           balance: "1234567890123456789",
           validForTick: 12345,
         },
       }),
     }),
   );
-  await page.addInitScript(() => {
+  await page.addInitScript((fixtureIdentity) => {
     let attempts = 0;
     let account = null;
+    const contractRequests = [];
+    window.__qaContractRequests = contractRequests;
     window.qubic = {
       isQubic: true,
       async connect() {
-        await new Promise((resolve) => setTimeout(resolve, 600));
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
         if (++attempts === 1) throw new Error("Fixture rejected connection");
         account = {
-          identity: "A".repeat(60),
+          identity: fixtureIdentity,
           name: "QA public identity fixture",
         };
       },
@@ -42,22 +51,37 @@ try {
       async disconnect() {
         account = null;
       },
+      async sendTransaction(request) {
+        contractRequests.push(request);
+        return {
+          txId: "fixture-transaction",
+          targetTick: 12350,
+          txBytesBase64: "",
+          txBytesHex: "",
+          networkTxId: "fixture-network-transaction",
+          broadcast: {},
+        };
+      },
       on() {
         return () => {};
       },
     };
-  });
+  }, identity);
   await page.goto(process.env.QA_BASE_URL ?? "http://127.0.0.1:4174");
   await page
-    .getByLabel("Message", { exact: true })
-    .fill("Starter round-trip fixture");
-  await page
-    .getByRole("button", { name: "Connect to sign", exact: true })
+    .getByRole("button", { name: "Sign & Verify", exact: true })
     .click();
-  const connect = page.getByRole("button", { name: /Connect Qubic/ });
+  const taskDialog = page.locator(".task-dialog");
+  await taskDialog
+    .getByRole("button", { name: "Connect wallet", exact: true })
+    .click();
+  const walletDialog = page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "Connect a wallet" }) });
+  const connect = walletDialog.getByRole("button", { name: /Connect Qubic/ });
   await connect.click();
   await connect.locator(".provider-action .spinner").waitFor();
-  assert.equal(await page.getByRole("dialog").locator(".spinner").count(), 1);
+  assert.equal(await walletDialog.locator(".spinner").count(), 1);
   const rowBox = await connect.boundingBox();
   const spinnerBox = await connect.locator(".spinner").boundingBox();
   assert.ok(
@@ -67,52 +91,126 @@ try {
       spinnerBox.y + spinnerBox.height <= rowBox.y + rowBox.height,
   );
 
-  await page
-    .getByText(
-      "Connection was not completed. Check your wallet, then try again.",
-      { exact: true },
-    )
-    .waitFor();
-  assert.equal(await page.getByRole("dialog").count(), 1);
+  await page.waitForTimeout(1_600);
+  assert.equal(await walletDialog.count(), 1);
+  await page.getByText("Request not completed", { exact: true }).waitFor();
   assert.equal(
     await page.getByRole("button", { name: "Open account details" }).count(),
     0,
   );
   await connect.click();
-  await page.getByRole("button", { name: "Open account details" }).waitFor();
-  assert.equal(await page.getByRole("dialog").count(), 0);
-  assert.equal(await page.locator(".session-feedback").count(), 0);
-  assert.equal(
-    await page.getByLabel("Message", { exact: true }).inputValue(),
-    "Starter round-trip fixture",
-  );
-  await page.getByRole("button", { name: "Sign message", exact: true }).click();
+  await walletDialog.waitFor({ state: "detached" });
+  assert.equal(await walletDialog.count(), 0);
   await page
+    .getByText(
+      "Wallet connected. Requests still require approval in your wallet.",
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(await page.locator(".session-feedback").count(), 0);
+  const messageDraft = taskDialog.locator(
+    ".signatures-screen #signature-message",
+  );
+  await messageDraft.waitFor({ state: "attached" });
+  await messageDraft.fill("Starter round-trip fixture");
+  await page.screenshot({
+    path: "artifacts/screenshots/sign-connected.png",
+    fullPage: true,
+  });
+  await taskDialog
+    .getByRole("button", { name: "Sign message", exact: true })
+    .click();
+  await page.getByText("Signature ready.", { exact: true }).waitFor();
+  await taskDialog
     .getByRole("button", { name: "Verify this signature", exact: true })
     .click();
   assert.equal(
-    await page.getByLabel("Signature", { exact: true }).inputValue(),
+    await taskDialog.getByLabel("Signature", { exact: true }).inputValue(),
     "ab".repeat(64),
   );
 
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "QEarn", exact: true }).click();
+  const qearnDialog = page.locator(".task-dialog");
+  await qearnDialog
+    .locator("#starter-contract-action-selector")
+    .selectOption("qearn-lock");
+  await qearnDialog.locator("#procedure-amount").fill("1000000");
+  await qearnDialog
+    .getByRole("button", { name: "Lock QU", exact: true })
+    .click();
+  assert.equal(
+    await qearnDialog
+      .getByText("The wallet approved the contract request.", { exact: true })
+      .count(),
+    0,
+  );
+  await page
+    .getByText("Contract request approved.", { exact: true })
+    .last()
+    .waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "QUtil", exact: true }).click();
+  const qutilDialog = page.locator(".task-dialog");
+  await qutilDialog
+    .locator("#starter-contract-action-selector")
+    .selectOption("q-util-vote");
+  await qutilDialog.locator("#procedure-pollId").fill("4");
+  await qutilDialog.locator("#procedure-option").fill("2");
+  await qutilDialog.locator("#procedure-amount").fill("0");
+  await qutilDialog
+    .getByRole("button", { name: "Vote in a poll", exact: true })
+    .click();
+  assert.equal(
+    await qutilDialog
+      .getByText("The wallet approved the contract request.", { exact: true })
+      .count(),
+    0,
+  );
+  await page
+    .getByText("Contract request approved.", { exact: true })
+    .last()
+    .waitFor();
+  const contractRequests = await page.evaluate(
+    () => window.__qaContractRequests,
+  );
+  assert.deepEqual(contractRequests, [
+    {
+      amount: "1000000",
+      destination:
+        "JAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVKHO",
+      inputType: 1,
+    },
+    {
+      amount: "0",
+      destination:
+        "EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVWRF",
+      inputType: 5,
+      payload:
+        "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAA=",
+    },
+  ]);
+
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Open account details" }).waitFor();
   await page.getByRole("button", { name: "Open account details" }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "Account details" }) });
   await dialog.getByRole("heading", { name: "Account details" }).waitFor();
   await dialog
     .getByText("1,234,567,890,123,456,789 QU", { exact: true })
     .waitFor();
-  assert.equal(
-    await dialog.getByText("A".repeat(60), { exact: true }).count(),
-    1,
-  );
+  assert.equal(await dialog.getByText(identity, { exact: true }).count(), 1);
   assert.equal(await dialog.locator(".identity-avatar svg").count(), 1);
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await dialog
     .getByRole("button", { name: "Copy identity", exact: true })
     .click();
+  await page.getByText("Identity copied.", { exact: true }).waitFor();
   assert.equal(
     await page.evaluate(() => navigator.clipboard.readText()),
-    "A".repeat(60),
+    identity,
   );
   await page.setViewportSize({ width: 390, height: 844 });
   const accessibility = await new AxeBuilder({ page }).analyze();
@@ -152,11 +250,14 @@ try {
       fixture: "synthetic extension through real WalletProvider",
       rejectionKeepsChooserOpen: true,
       retryConnects: true,
+      connectShowsSigningForm: true,
+      qearnAndQUtilProcedureRequestsUsePackageTypedInputs: true,
       disconnectClearsSession: true,
       accountModalIdentityAvatarAndExactBalance: true,
       escapeRestoresFocus: true,
       spinnerInsideSelectedProvider: true,
       noConnectionSuccessBanner: true,
+      transientFeedbackUsesToasts: true,
     }),
   );
 } finally {

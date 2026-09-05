@@ -43,13 +43,8 @@ try {
     );
     await page.keyboard.press("Enter");
     await page.getByRole("dialog").waitFor();
-    await page.keyboard.press("Escape");
-    await page
-      .getByRole("navigation", { name: "Reference flows" })
-      .getByRole("button", { name: "RandomLottery" })
-      .click();
-    const disabled = page.getByRole("button", {
-      name: "Review ticket",
+    const disabled = page.getByRole("dialog").getByRole("button", {
+      name: "Qubic Extension unavailable",
       exact: true,
     });
     assert.equal(await disabled.isDisabled(), true);
