@@ -1,35 +1,36 @@
 # Starter validation
 
-Observed on 2026-09-05. This records the current focused starter behavior. It
-is not a wallet-security audit.
+Observed on 2026-09-05. This records the current focused starter behavior. It is
+not a wallet-security audit.
 
 ## Requirement-to-evidence map
 
 | Requirement or changed public output | Concrete check | Observed result |
 | --- | --- | --- |
-| Focus the starter on selected contracts | `starter-contracts.test.ts` and `starter-app.test.tsx` | The only contract IDs are QEarn and QUtil. The hero exposes Sign & Verify, QEarn, and QUtil, with no generic Contract call CTA. |
-| Use generated contract procedures | `starter-contracts.test.ts` calls the installed `@qubic.org/contracts` builders | QEarn Lock resolves to contract 9 input type 1 with the entered amount. QUtil Vote resolves to contract 4 input type 5 with a generated 56-byte payload. |
-| Reject unsafe procedure input before wallet launch | `starter-contracts.test.ts` | Zero or malformed QEarn amount and malformed QUtil option throw before a request is built. |
-| Keep raw ABI fields out of the UI | `scripts/qa.mjs` against the static production export | QEarn and QUtil each show two selected actions. Queries are visible without a wallet. Selecting a procedure exposes exactly one Connect wallet action and no input fields. |
-| Use the connected identity for QUtil voting | `scripts/qa-wallet-boundary.mjs` through the production UI and real `WalletProvider` | The synthetic extension receives a QUtil contract-4, input-type-5 request with the package-generated payload and no attached QU. |
-| Attach QEarn lock amount correctly | `scripts/qa-wallet-boundary.mjs` through the production UI and real `WalletProvider` | The synthetic extension receives contract-9, input-type-1 with the entered `1000000` QU amount. |
-| Keep compact dialogs stable | `scripts/qa.mjs` at 1440×900 and 390×844 in light and dark themes | QEarn's contract and action selectors match the full screen width. Modals measure at most 480px desktop and 364.6px mobile in the observed run. |
-| Remove redundant cancel actions | `scripts/qa.mjs` modal navigation with Escape | All dialogs close with Escape and restore focus to their opener. The task footer no longer adds a Cancel button. |
-| Preserve accessible, responsive UI | `scripts/qa.mjs` with axe | Four viewport/theme runs report no horizontal overflow, no runtime errors, and zero serious or critical axe findings on home, chooser, QEarn, QUtil, and signing dialogs. |
-| Preserve wallet behavior | `scripts/qa-wallet-boundary.mjs` | First connection rejection retains the chooser, retry connects, signing form appears only after connection, account details show a valid fixture identity/avatar/balance, disconnect clears the session, and provider spinner stays inside its selected row. |
-| Put transient feedback in toasts | `scripts/qa-wallet-boundary.mjs` through the built UI | Connection rejection and success, signature creation, contract approval, and identity copying render as toasts. The task dialog contains no inline approval text or session feedback card. |
-| Send Qubic WalletConnect signing input in its expected shape | `wallet-connect.test.ts` | The custom WalletConnect connector calls `qubic_sign` with `{ message }`, not a bare string. |
-| Preserve relay behavior | `scripts/qa-relay-prewarm.mjs` | Synthetic HTTPS/relay check reports background registration, no automatic launch, one provider click launch, and one registration. |
-| Preserve motion and hero behavior | `scripts/qa-explorer-shell.mjs` and `scripts/qa-button-feel.mjs` | Hero is full viewport, Plasma is disabled for reduced motion, footer is absent, and tactile buttons retain pointer and keyboard feedback without raising disabled controls. |
-| Static production output remains valid | `bun run test && bun run build` | TypeScript and lint pass. Isolated suite passes 68 tests. Next.js produces static `/` and `/_not-found` routes. |
+| Expose only direct starter actions | `components/starter-app.test.tsx` and `scripts/qa.mjs` against the static export | The hero exposes exactly **Sign & Verify**, **Lock QUs**, and **Send to many**. It has no generic Contract call CTA. |
+| Remove generic contract selectors | `scripts/qa.mjs` at desktop and mobile viewports | The disconnected Lock QUs and Send to many dialogs contain no select controls or raw ABI inputs. Each has exactly one Connect wallet action. |
+| Build QEarn Lock safely | `lib/contracts/starter-procedures.test.ts` | QEarn Lock resolves to contract 9, input type 1, with the entered positive whole-QU amount attached. Zero is rejected before a request is built. |
+| Support multiple Send to many recipients safely | `lib/contracts/starter-procedures.test.ts` and `scripts/qa-wallet-boundary.mjs` | Two recipient-and-amount pairs produce two generated QUtil contract-4, input-type-1 payloads. The production UI requests an explicit approval for recipient 1, then recipient 2. |
+| Validate recipient and amount input before wallet launch | `lib/contracts/starter-procedures.test.ts` | An empty queue, malformed identity, and zero amount throw before the wallet request boundary. |
+| Keep raw ABI fields out of the UI | `scripts/qa.mjs` and `scripts/qa-wallet-boundary.mjs` | Users enter only reviewed amounts and Qubic identities. Contract indices, input types, and encoded payloads are not editable. |
+| Keep direct dialogs compact and responsive | `scripts/qa.mjs` at 1440×900 and 390×844, plus populated mobile queue coverage in `scripts/qa-wallet-boundary.mjs` | Direct dialogs measure at most 480px desktop, have no horizontal overflow on a populated 390px queue, and report zero serious or critical axe findings. |
+| Preserve accessible, responsive UI | `scripts/qa.mjs` | Four viewport and theme runs report no horizontal overflow, no runtime errors, and zero serious or critical axe findings on home, connector, Lock QUs, Send to many, and signing dialogs. |
+| Keep transient feedback outside task content | `scripts/qa-wallet-boundary.mjs` through the built UI | Connection, signature, procedure, and identity-copy feedback render as toasts. The task dialogs contain no inline session feedback card or approval banner. |
+| Use identity avatars in wallet feedback | `scripts/qa-wallet-boundary.mjs` through the built UI | Connected, approval, and copied-identity toasts include an identicon. The redundant “Your keys remain in your wallet” copy is absent. |
+| Improve account details controls | `scripts/qa-wallet-boundary.mjs` through the built UI | The balance refresh control is icon-only, tick copy is absent, and compact Copy identity and Disconnect controls carry icons. The fixture identity, avatar, and exact balance render correctly. |
+| Keep buttons flat but animated | `scripts/qa-button-feel.mjs` with motion allowed and reduced | Buttons have no resting or pressed depth shadow, retain a 0.98 press animation when motion is allowed, preserve keyboard focus and activation, and disable motion under reduced-motion preferences. |
+| Preserve WalletConnect signing compatibility | `lib/connectors/wallet-connect.test.ts` | The custom WalletConnect connector calls `qubic_sign` with `{ message }`, not a bare string. |
+| Preserve relay behavior | `scripts/qa-relay-prewarm.mjs` | Synthetic HTTPS/relay check reports background registration, no automatic launch, one provider-click launch, and one registration. |
+| Preserve full-viewport Plasma hero | `scripts/qa-explorer-shell.mjs` | The hero is full viewport, Plasma is disabled for reduced motion, the footer is absent, the header remains correctly positioned, and no runtime errors occur. |
+| Static production output remains valid | `bun run test && bun run build` | TypeScript and lint pass. The isolated suite passes 66 tests with 320 expectations. Next.js produces static `/` and `/_not-found` routes. |
 
 ## Current limitations
 
 The responsive browser and wallet-boundary tests use the actual built UI. The
 procedure submission test intentionally substitutes a synthetic extension and
 captures its request objects. The WalletConnect signing-shape test also uses a
-fixture client. They prove the local UI-to-provider boundary, not a native
-wallet approval or an on-chain result.
+fixture client. They prove the local UI-to-provider boundary, not a native wallet
+approval or an on-chain result.
 
 A complete browser → public HTTPS origin → Glyph Relay → native wallet → signed
 callback round trip is still unverified in this environment. It requires a
@@ -52,4 +53,4 @@ node scripts/qa-button-feel.mjs
 ```
 
 Screenshots are written to ignored `artifacts/screenshots/`. They are inspection
-evidence, not a substitute for the asserted browser results above.
+evidence, not a substitute for the asserted browser results.

@@ -2,28 +2,30 @@
 
 ## Three focused tasks
 
-The full-viewport hero exposes three direct CTAs: **Sign & Verify**, **QEarn**,
-and **QUtil**. Each CTA opens a compact dialog instead of rendering a permanent
-card or navigation surface. The dialog close control and Escape key are the
-only dismissal affordances. There is no redundant Cancel action.
+The full-viewport hero exposes three direct CTAs: **Sign & Verify**, **Lock
+QUs**, and **Send to many**. Each CTA opens a compact dialog instead of rendering
+a permanent card or navigation surface. The dialog close control and Escape key
+are the only dismissal affordances. There is no redundant Cancel action.
 
-QEarn and QUtil share one contract example screen. The initial hero CTA selects
-the relevant contract, then the screen's full-width Contract and Action
-selectors allow the user to switch between the two reviewed contracts.
+Each contract CTA opens its own feature-local form. This avoids a generic
+contract selector, prevents content-dependent layout shifts, and keeps the
+available action obvious.
 
 ## Ownership
 
 - `components/starter-app.tsx`: shell, hero CTAs, modal state, account header.
-- `components/wallet/wallet-session-provider.tsx`: shared connection state,
-  single-flight request lock, safe feedback, and Glyph relay preparation.
+- `components/wallet/wallet-session-provider.tsx`: one active connector,
+  shared connection state, single-flight request lock, concise feedback, and
+  Glyph relay preparation.
 - `components/wallet/request-status.tsx`: maps shared wallet progress and
-  transient outcomes to global toasts.
+  transient outcomes to global identity-aware toasts.
 - `components/signatures/signatures-screen.tsx`: signing, verification, and
-  result state.
-- `components/contract-call/contract-examples-screen.tsx`: contract/action
-  selection, query result state, procedure inputs, and submission state.
-- `lib/contracts/starter-contracts.ts`: reviewed contract metadata, generated
-  typed builders, numeric validation, and payload conversion.
+  durable result state.
+- `components/qearn/lock-qus-screen.tsx`: QEarn Lock inputs and submission.
+- `components/qutil/send-to-many-screen.tsx`: QUtil SendToMany recipient queue
+  and one-at-a-time approval progression.
+- `lib/contracts/starter-procedures.ts`: reviewed typed builders, numeric and
+  identity validation, and payload conversion.
 - `lib/connectors/glyph.ts`: signed Glyph Relay v2 request boundary.
 
 Feature screens own their temporary fields and results. The shell does not own
@@ -32,21 +34,21 @@ contract inputs or wallet requests.
 ## Feedback
 
 Transient updates and errors never consume modal layout. Connection progress,
-wallet outcomes, copy feedback, validation errors, and query updates use the
-shared toast region. Durable artifacts remain in their task: a signed message
-stays available for copy or verification, and a read-only contract response
-stays available for inspection.
+wallet outcomes, copy feedback, and validation errors use the shared toast
+region. Wallet-related outcome toasts use the active or just-disconnected
+identity's avatar. Durable artifacts remain in their task: a signed message stays
+available for copy or verification.
 
 ## Procedure gate
 
-Read-only QEarn and QUtil queries remain usable without an account. Choosing a
-procedure while disconnected presents exactly one primary action: **Connect
-wallet**. It does not render procedure inputs or a submit control until the
-connection succeeds.
+Each direct procedure presents exactly one primary action, **Connect wallet**,
+while disconnected. It does not render procedure inputs or a submit control until
+the connection succeeds.
 
-Once connected, QEarn `Lock QU` accepts a whole attached-QU amount. QUtil
-`Vote in a poll` accepts a poll ID, option, and contract-defined vote amount.
-The connected identity is supplied by the wallet, never typed by the user. All
+Once connected, **Lock QUs** accepts a positive whole attached-QU amount for
+QEarn. **Send to many** collects validated Qubic recipient-and-amount pairs.
+QUtil's installed SendToMany V1 ABI encodes one pair per request, so the UI
+queues the generated calls and asks for an explicit approval for each one. All
 ABI encoding comes from `@qubic.org/contracts`; no UI field represents a raw
 payload or contract index.
 
@@ -69,9 +71,9 @@ not a second signing path or a fallback that could duplicate a request.
 
 The full-bleed Plasma hero is decorative and disabled under reduced motion.
 Buttons retain tactile raised and pressed states with keyboard focus. Task
-dialogs are bounded to 480px on desktop, responsive on mobile, and their
-content, selectors, and action controls use the same available width. Dialogs,
-forms, and selector changes must retain zero serious or critical axe findings.
+dialogs are bounded to 480px on desktop, responsive on mobile, and use the same
+available width for content and controls. Dialogs and forms must retain zero
+serious or critical axe findings.
 
 Source paths use kebab-case. Component symbols use PascalCase. Prefer
 feature-local code to a generic state machine or redundant data store.
