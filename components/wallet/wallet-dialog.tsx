@@ -1,10 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import {
-  ArrowRightIcon,
-  QrCodeIcon,
-} from "lucide-react";
+import { ArrowRightIcon } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Dialog,
@@ -77,7 +74,7 @@ export function WalletDialog() {
                         height={26}
                       />
                     ) : connector.id === "walletconnect" ? (
-                      <QrCodeIcon size={24} />
+                      <Image className="glyph-mark" src="/brand/walletconnect.svg" alt="" width={28} height={28} />
                     ) : (
                       <Image src="/brand/qubic-extension.svg" alt="" width={18} height={30} />
                     )}
