@@ -9,9 +9,16 @@ export function LoadingIcon() {
 }
 
 export function RequestStatus() {
-  const { pendingAction, error, notice, feedback, dismissFeedback } =
-    useWalletSession();
-  if (!pendingAction && !error && !notice) return null;
+  const {
+    pendingAction,
+    error,
+    notice,
+    feedback,
+    dismissFeedback,
+    dialogOpen,
+  } = useWalletSession();
+  // Connection success is already visible in the account control.
+  if (!error && (!pendingAction || dialogOpen)) return null;
   const interrupted = feedback?.state === "interrupted";
   const title = error
     ? interrupted

@@ -26,6 +26,7 @@ try {
     window.qubic = {
       isQubic: true,
       async connect() {
+        await new Promise((resolve) => setTimeout(resolve, 600));
         if (++attempts === 1) throw new Error("Fixture rejected connection");
         account = {
           identity: "A".repeat(60),
@@ -55,6 +56,17 @@ try {
     .click();
   const connect = page.getByRole("button", { name: /Connect Qubic/ });
   await connect.click();
+  await connect.locator(".provider-action .spinner").waitFor();
+  assert.equal(await page.getByRole("dialog").locator(".spinner").count(), 1);
+  const rowBox = await connect.boundingBox();
+  const spinnerBox = await connect.locator(".spinner").boundingBox();
+  assert.ok(
+    rowBox &&
+      spinnerBox &&
+      spinnerBox.y >= rowBox.y &&
+      spinnerBox.y + spinnerBox.height <= rowBox.y + rowBox.height,
+  );
+
   await page
     .getByText(
       "Connection was not completed. Check your wallet, then try again.",
@@ -69,6 +81,7 @@ try {
   await connect.click();
   await page.getByRole("button", { name: "Open account details" }).waitFor();
   assert.equal(await page.getByRole("dialog").count(), 0);
+  assert.equal(await page.locator(".session-feedback").count(), 0);
   assert.equal(
     await page.getByLabel("Message", { exact: true }).inputValue(),
     "Starter round-trip fixture",
@@ -142,6 +155,8 @@ try {
       disconnectClearsSession: true,
       accountModalIdentityAvatarAndExactBalance: true,
       escapeRestoresFocus: true,
+      spinnerInsideSelectedProvider: true,
+      noConnectionSuccessBanner: true,
     }),
   );
 } finally {

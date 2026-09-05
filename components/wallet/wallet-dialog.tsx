@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { ArrowRightIcon } from "lucide-react";
+import { useState } from "react";
+import { ChevronRightIcon } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Dialog,
@@ -27,6 +28,7 @@ export function WalletDialog() {
     pairingUri,
     connect,
   } = useWalletSession();
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   // Client-only availability is evaluated on a deliberate open, not during SSR.
   if (!dialogOpen) return null;
   const visibleConnectors = wallet.connectors.filter(
@@ -36,10 +38,10 @@ export function WalletDialog() {
   );
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogContent className="wallet-dialog">
+      <DialogContent className="wallet-dialog connector-dialog">
         <DialogHeader>
           <DialogTitle>Connect a wallet</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="sr-only">
             Your wallet, your way. Choose one to get started.
           </DialogDescription>
         </DialogHeader>
@@ -54,7 +56,13 @@ export function WalletDialog() {
               <button
                 type="button"
                 disabled={!availability.available || Boolean(pendingAction)}
-                onClick={() => connect(connector.id)}
+                onClick={() => {
+                  setSelectedProvider(connector.id);
+                  connect(connector.id);
+                }}
+                aria-busy={
+                  Boolean(pendingAction) && selectedProvider === connector.id
+                }
                 aria-label={
                   availability.available
                     ? `Connect ${connectorLabel(connector.id)}`
@@ -74,23 +82,33 @@ export function WalletDialog() {
                         height={26}
                       />
                     ) : connector.id === "walletconnect" ? (
-                      <Image className="glyph-mark" src="/brand/walletconnect.svg" alt="" width={28} height={28} />
+                      <Image
+                        className="glyph-mark"
+                        src="/brand/walletconnect.svg"
+                        alt=""
+                        width={28}
+                        height={28}
+                      />
                     ) : (
-                      <Image src="/brand/qubic-extension.svg" alt="" width={18} height={30} />
+                      <Image
+                        src="/brand/qubic-extension.svg"
+                        alt=""
+                        width={18}
+                        height={30}
+                      />
                     )}
                   </span>
                   <strong>{connectorLabel(connector.id)}</strong>
                   <span className="provider-action" aria-hidden="true">
-                    {availability.available ? (
-                      <ArrowRightIcon size={18} />
+                    {pendingAction && selectedProvider === connector.id ? (
+                      <LoadingIcon />
+                    ) : availability.available ? (
+                      <ChevronRightIcon size={18} />
                     ) : (
                       <span className="provider-unavailable-dot" />
                     )}
                   </span>
                 </span>
-                {pendingAction && availability.available ? (
-                  <LoadingIcon />
-                ) : null}
               </button>
             );
           })}
@@ -98,9 +116,6 @@ export function WalletDialog() {
             <p className="notice">No wallets available.</p>
           )}
         </div>
-        <p className="chooser-safety">
-          Your keys stay in your wallet. You approve every request.
-        </p>
         {pairingUri && (
           <div className="pairing-box">
             <QRCodeSVG

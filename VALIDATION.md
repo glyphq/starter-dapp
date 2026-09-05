@@ -111,3 +111,13 @@ button. The fixture does not prove a real signature or approval. Result displays
 are bound to the original connector/account to reject late cross-account output.
 74 tests and production build pass. Exposing the form uncovered tab contrast and
 textarea-label regressions, both fixed and checked by the final browser run.
+
+## Compact connection feedback
+
+The built UI passes the four viewport/theme suite. The synthetic extension check
+now delays connection and observes exactly one spinner inside the selected
+provider's action slot, with its bounding box fully inside the row. After
+connection it observes zero session-feedback banners. Account copy, exact balance,
+mobile accessibility, focus restoration and disconnect still pass. Routine notices
+are hidden; pending actions outside the chooser and actionable errors remain as
+flat inline feedback. These tests do not perform a real native-wallet approval.
