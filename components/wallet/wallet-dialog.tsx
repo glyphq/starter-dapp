@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +24,6 @@ export function WalletDialog() {
     setDialogOpen,
     pendingAction,
     pairingUri,
-    relayReady,
     connect,
   } = useWalletSession();
   // Client-only availability is evaluated on a deliberate open, not during SSR.
@@ -47,11 +45,19 @@ export function WalletDialog() {
             );
             const glyph = connector.id === "glyph-wallet";
             return (
-              <div
+              <button
+                type="button"
+                disabled={!availability.available || Boolean(pendingAction)}
+                onClick={() => connect(connector.id)}
+                aria-label={
+                  availability.available
+                    ? `Connect ${connectorLabel(connector.id)}`
+                    : `${connectorLabel(connector.id)} unavailable`
+                }
                 className={`wallet-option ${availability.available ? "" : "is-unavailable"}`}
                 key={connector.id}
               >
-                <div className="wallet-option-heading">
+                <span className="wallet-option-heading">
                   {glyph && (
                     <Image
                       className="glyph-mark"
@@ -65,27 +71,14 @@ export function WalletDialog() {
                   <span className="availability-label">
                     {availability.available ? "Available" : "Setup required"}
                   </span>
-                </div>
-                <p>{availability.description}</p>
-                <Button
-                  variant={
-                    glyph && availability.available ? "default" : "outline"
-                  }
-                  disabled={!availability.available || Boolean(pendingAction)}
-                  onClick={() => connect(connector.id)}
-                >
-                  {pendingAction && availability.available ? (
-                    <LoadingIcon />
-                  ) : null}
-                  {!availability.available
-                    ? `${connectorLabel(connector.id)} unavailable`
-                    : glyph
-                      ? relayReady
-                        ? "Open Glyph Wallet"
-                        : "Prepare Glyph Wallet"
-                      : `Connect ${connectorLabel(connector.id)}`}
-                </Button>
-              </div>
+                </span>
+                <span className="wallet-option-description">
+                  {availability.description}
+                </span>
+                {pendingAction && availability.available ? (
+                  <LoadingIcon />
+                ) : null}
+              </button>
             );
           })}
           {wallet.connectors.length === 0 && (

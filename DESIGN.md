@@ -6,7 +6,9 @@ Connect, RandomLottery, and Sign & Verify share a compact shell, wallet chooser,
 identity menu, and persistent theme. The UI uses local Geist fonts, monochrome
 surfaces, readable state labels, keyboard focus, and responsive action groups.
 Unavailable registered connectors remain visible with setup requirements.
-Opening the chooser never starts a relay session.
+Opening the chooser on valid HTTPS starts background relay preparation, never
+a wallet launch. Connected Glyph sessions are replenished between actions.
+Each provider is one keyboard-accessible row, not a row with a separate button.
 
 ## Ownership
 

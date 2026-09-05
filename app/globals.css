@@ -175,12 +175,13 @@
 .wallet-dialog [data-slot="dialog-title"] { font-size: 21px; letter-spacing: -.035em; }
 .wallet-dialog [data-slot="dialog-description"] { font-size: 13px; line-height: 1.65; }
 .connector-list { display: flex; flex-direction: column; gap: 12px; }
-.wallet-option { padding: 20px 0; border-top: 1px solid var(--border); }
+.wallet-option { display: block; width: 100%; padding: 20px 12px; border: 0; border-top: 1px solid var(--border); background: transparent; color: var(--text); text-align: left; }
+.wallet-option:hover:not(:disabled) { background: var(--surface-raised); }
 .wallet-option.is-unavailable { background: transparent; }
 .wallet-option-heading { display: flex; align-items: center; gap: 8px; }
 .wallet-option-heading strong { font-weight: 550; font-size: 14px; }
 .availability-label { margin-left: auto; font-size: 10px; color: var(--text-muted); }
-.wallet-option p { margin: 10px 0 14px; color: var(--text-muted); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.wallet-option-description { display: block; margin: 10px 0 14px; color: var(--text-muted); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 .wallet-option [data-slot="button"] { width: 100%; min-height: 40px; }
 .glyph-mark { filter: invert(1); flex-shrink: 0; }
 :root[data-theme="light"] .glyph-mark { filter: none; }

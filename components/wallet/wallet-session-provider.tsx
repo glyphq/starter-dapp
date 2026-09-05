@@ -58,6 +58,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   const accountKey = `${wallet.activeConnector?.id ?? "none"}:${wallet.account?.identity ?? "none"}`;
   const [previousAccountKey, setPreviousAccountKey] = useState(accountKey);
   const inFlight = useRef(false);
+  const [, refreshReadiness] = useState(0);
 
   // WalletProvider.connect reports rejection through wallet.error, not a rejected
   // promise. Only an observed account transition establishes successful connection.
@@ -89,6 +90,40 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
       });
     };
   }, []);
+
+  // Preparation registers a relay session only. It never opens or approves a wallet.
+  useEffect(() => {
+    if (
+      pendingAction ||
+      (!dialogOpen && wallet.activeConnector?.id !== "glyph-wallet")
+    )
+      return;
+    const glyph = wallet.connectors.find(
+      (connector) => connector.id === "glyph-wallet",
+    );
+    if (
+      !glyph ||
+      !connectorAvailability(glyph, hasWalletConnectProjectId).available
+    )
+      return;
+    let active = true;
+    void prewarmGlyphRelaySession().then(
+      () => {
+        if (active) refreshReadiness((value) => value + 1);
+      },
+      () => {
+        /* A deliberate action can retry and display a safe error. */
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [
+    dialogOpen,
+    pendingAction,
+    wallet.activeConnector?.id,
+    wallet.connectors,
+  ]);
 
   function dismissFeedback() {
     setError(null);
@@ -143,7 +178,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
       dismissFeedback();
       setPairingUri(null);
     }
-    // Choosing a wallet does not consent to creating a Glyph relay session.
+    // Opening the chooser allows background preparation, never native launch.
     setDialogOpen(true);
   }
 

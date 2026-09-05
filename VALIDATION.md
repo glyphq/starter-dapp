@@ -69,3 +69,19 @@ not a claim that a native approval was completed after this refactor.
 Remaining boundary: end-to-end Glyph/WalletConnect approval, real signatures,
 and paid contract confirmation require an authorized wallet and public HTTPS
 origin. No wallet approval, private-key access, or paid transaction was performed.
+
+## Background relay and provider-row iteration
+
+This supersedes earlier statements that chooser opening never prepares a relay:
+on public HTTPS it now prewarms. Local HTTP still makes zero relay requests.
+The existing four-context production browser suite and extension rejection/retry/
+disconnect check pass after converting providers to single native button rows.
+74 tests, typecheck, lint, and production build pass.
+
+`node scripts/qa-relay-prewarm.mjs` uses synthetic HTTPS and relay responses around
+the real exported app and installed SDK. It observes zero registrations before
+chooser intent, one registration after opening, zero automatic native launches,
+and exactly one blocked native launch from the first provider click, reusing
+the prepared session. It does not contact a real relay or open a real wallet.
+Live end-to-end native approval remains unverified. Slow/failed preparation keeps
+the explicit retry-click fallback rather than launching outside a user gesture.

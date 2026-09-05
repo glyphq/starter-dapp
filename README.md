@@ -120,7 +120,7 @@ need, with a separate threat model and server-side secret handling.
 
 Source filenames use kebab-case. React component symbols remain PascalCase.
 The shell composes feature screens. `wallet-session-provider.tsx` coordinates
-connection state, request locking, safe feedback, and deliberate Glyph preparation.
+connection state, request locking, safe feedback, and background Glyph preparation.
 Feature screens own forms and temporary results. Account changes reset those forms.
 `use-lottery-purchase.ts` keeps signed-purchase tracking alive across navigation
 and account changes, retaining the submitting identity. It does not persist on reload.
@@ -165,8 +165,12 @@ For message signing, follow `signMessage()` in `components/signatures/signatures
    awaiting network work first. This preserves the browser gesture for Glyph.
 4. Display `signatureHex`, handle rejection, and clear the busy state in `finally`.
 
-Do not put relay preparation on hover, focus, or component mount. Do not retry
-by automatically opening the wallet after an asynchronous preparation.
+The session provider prewarms in the background when the chooser opens on a
+valid HTTPS origin and between connected Glyph actions. A ready session permits
+one-click launch. If preparation is still pending or failed, the deliberate
+action fallback prepares and asks for another click. Do not automatically open
+the wallet after asynchronous preparation, or start relay traffic on every page
+mount, hover, or focus. Local HTTP browsing never registers a relay session.
 `requestGlyphTransfer()` and `requestGlyphScCall()` use the same readiness rule.
 Glyph's generic `sendTransaction()` and `signTransaction()` are intentionally
 unsupported. Use the typed helpers rather than constructing protocol messages
