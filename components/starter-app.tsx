@@ -88,10 +88,10 @@ export function StarterApp() {
       <main className="workspace-main" id="main-content" tabIndex={-1}>
         <div className="workspace-intro">
           <span className="eyebrow">Qubic developer reference</span>
-          <h1>One wallet. A few clear actions.</h1>
+          <h1>Wallet playground.</h1>
           <p>
-            Explore connection, signatures, and a real contract call without
-            giving this app your keys.
+            Connect your wallet. Try a signature. Explore a contract.
+            Your keys stay with you.
           </p>
         </div>
         <nav className="flow-nav" aria-label="Reference flows">

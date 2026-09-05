@@ -34,3 +34,10 @@ Keys, callback capabilities, signed protocol payloads, and raw errors never belo
 in UI diagnostics. Mainnet approval remains in the wallet. Source paths use
 kebab-case, component symbols use PascalCase. Prefer feature-local code over a
 new framework, generic state machine, or redundant data store.
+
+## Flat workspace iteration
+
+The main workspace uses open sections and underline navigation rather than
+rounded container cards. Account, price, result, and connector details use ruled
+rows. Dialogs and editable inputs remain contained. This is a presentation-only
+change, with no changes to wallet request behavior.
