@@ -67,9 +67,11 @@ for QEarn and `transfer` for Send QUs.
 Requests stay bound to mainnet and account identity. Mainnet approval remains in
 the wallet.
 
-The local WalletConnect adapter sends connected `{ from, message }` input because
-Qubic Wallet expects a map for `qubic_sign`. This is a narrow protocol bridge,
-not a second signing path or a fallback that could duplicate a request.
+The local WalletConnect adapter accepts only a checksum-valid `qubic:mainnet`
+account whose session grants every method this starter requests. It adds the
+connected sender to both transaction inputs and the `{ from, message }` map that
+Qubic Wallet expects for `qubic_sign`. This is a narrow protocol bridge, not a
+second signing path or a fallback that could duplicate a request.
 
 ## Visual and accessibility constraints
 

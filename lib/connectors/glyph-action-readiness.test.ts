@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 const events: string[] = [];
 let resultOverride: Record<string, unknown> | null = null;
 const identity = "A".repeat(60);
+const signature = btoa(String.fromCharCode(...new Uint8Array(64).fill(1)));
 const preparedSession = {
   session: "session-action-123456789012345",
   callbackUrl: "https://relay.glyphq.org/v2/callback/session-action-123456789012345/c_1234567890123456789012",
@@ -71,7 +72,7 @@ mock.module("@glyph-oss/connect", () => ({
         type: "sign_message",
         nonce: "sign-nonce",
         identity,
-        signature: "AQI=",
+        signature,
       });
     }
     if (request.type === "transfer") {
@@ -156,7 +157,7 @@ describe("Glyph action relay readiness", () => {
 
     const signing = glyphConnector.signMessage("Sign this message");
     expect(events).toEqual(["prepare", "subscribe:sign_message", "launch:sign_message"]);
-    await expect(signing).resolves.toMatchObject({ signatureHex: "0102" });
+    await expect(signing).resolves.toMatchObject({ signatureHex: "01".repeat(64) });
 
     const verifyIntent = createGlyphRequestIntentHandlers(prewarmGlyphRelaySession);
     const verifyWarming = verifyIntent.onClick();
@@ -190,7 +191,7 @@ describe("Glyph action relay readiness", () => {
     await retryAttempt;
     expect(isGlyphRelaySessionReady()).toBe(true);
 
-    await expect(glyphConnector.signMessage("Retry this message")).resolves.toMatchObject({ signatureHex: "0102" });
+    await expect(glyphConnector.signMessage("Retry this message")).resolves.toMatchObject({ signatureHex: "01".repeat(64) });
     expect(events).toEqual(["prepare", "prepare", "subscribe:sign_message", "launch:sign_message"]);
   });
 
@@ -244,5 +245,21 @@ describe("Glyph action relay readiness", () => {
       expect(isGlyphRelaySessionReady()).toBe(false);
     });
   }
+
+  test("rejects a signed message with a malformed signature length", async () => {
+    const preparing = prewarmGlyphRelaySession();
+    nextPreparation.resolve(preparedSession);
+    await preparing;
+    resultOverride = {
+      status: "signed",
+      type: "sign_message",
+      nonce: "sign-nonce",
+      identity,
+      signature: "AQI=",
+    };
+
+    await expect(glyphConnector.signMessage("Malformed response")).rejects.toThrow();
+    expect(isGlyphRelaySessionReady()).toBe(false);
+  });
 
 });

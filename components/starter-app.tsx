@@ -61,10 +61,9 @@ export function StarterApp() {
     setTask(next);
   }
   function closeTask(open: boolean) {
-    if (!open) {
-      dismissFeedback();
-      setTask(null);
-    }
+    if (open || pendingAction) return;
+    dismissFeedback();
+    setTask(null);
   }
   return (
     <div className="workspace-shell">

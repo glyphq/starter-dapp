@@ -981,6 +981,9 @@ export const glyphConnector: WalletConnector = {
       }
       try {
         signatureBytes = base64ToBytes(result.signature);
+        if (signatureBytes.byteLength !== 64) {
+          return operationFailure(correlation, "invalid_response");
+        }
       } catch {
         return operationFailure(correlation, "invalid_response");
       }

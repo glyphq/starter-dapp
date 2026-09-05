@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const identity = "A".repeat(60);
+const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(64).fill(1)));
+const signatureHex = "01".repeat(64);
 const launches: string[] = [];
 let resolveCallback!: (value: Record<string, unknown>) => void;
 let callback: Promise<Record<string, unknown>>;
@@ -122,10 +124,10 @@ describe("Glyph signed request single-flight launches", () => {
       type: "sign_message",
       nonce: "sign-nonce",
       identity,
-      signature: "AQI=",
+      signature: signatureBase64,
     });
-    await expect(first).resolves.toMatchObject({ signatureHex: "0102" });
-    await expect(repeated).resolves.toMatchObject({ signatureHex: "0102" });
+    await expect(first).resolves.toMatchObject({ signatureHex });
+    await expect(repeated).resolves.toMatchObject({ signatureHex });
   });
 
   test("verify launches one envelope for rapid repeated submits", async () => {

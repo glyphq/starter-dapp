@@ -25,11 +25,11 @@ capability. Every request still requires wallet approval.
 
 ## Wallet behavior
 
-| Connector               | Behavior                                                                                                                                                  |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Qubic browser extension | Uses the injected provider through a compatibility adapter that adds the current `from` identity to every transaction. It is disabled when not installed. |
-| WalletConnect           | Uses QR pairing, requires `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, and sends `qubic_sign` input as `{ from, message }` for Qubic Wallet compatibility.     |
-| Glyph Wallet            | Uses a Relay v2 desktop deep link and requires a public HTTPS deployment.                                                                                 |
+| Connector               | Behavior                                                                                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Qubic browser extension | Uses the injected provider through a compatibility adapter that adds the current `from` identity to every transaction. It is disabled when not installed.                           |
+| WalletConnect           | Uses QR pairing, requires `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, validates the granted mainnet account and required methods, and adds its active `from` identity to every request. |
+| Glyph Wallet            | Uses a Relay v2 desktop deep link and requires a public HTTPS deployment.                                                                                                           |
 
 A disconnected action presents only **Connect wallet**. Inputs and its submit
 control appear only once an account connects.
@@ -96,9 +96,9 @@ its active `from` identity to each transaction. WalletConnect uses the shared
 `requestGlyphTransfer()` for direct transfers through its signed Relay boundary.
 
 `lib/connectors/wallet-connect.ts` is a small compatibility adapter around the
-WalletConnect client. It keeps the upstream connector contract while sending a
-map-shaped `qubic_sign` parameter with the connected sender that Qubic Wallet
-expects.
+WalletConnect client. It accepts only sessions granting the app's requested
+mainnet methods and a checksum-valid account. It then adds that connected sender
+to map-shaped `qubic_sign` and transaction inputs that Qubic Wallet expects.
 
 ## Glyph relay behavior
 

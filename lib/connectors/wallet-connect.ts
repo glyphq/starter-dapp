@@ -8,6 +8,7 @@ import type {
   WalletConnector,
   WalletConnectorEvent,
 } from "@qubic.org/react";
+import { identityToPublicKey } from "@qubic.org/crypto";
 import type { Identity } from "@qubic.org/types";
 
 type WalletConnectNamespace = {
@@ -64,6 +65,17 @@ const walletConnectMethods = {
 
 type EventCallback = (...args: unknown[]) => void;
 
+function parseIdentity(value: string): Identity | null {
+  if (!/^[A-Z]{60}$/.test(value)) return null;
+
+  try {
+    identityToPublicKey(value as Identity);
+    return value as Identity;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Qubic WalletConnect connector with the wallet's map-shaped `qubic_sign`
  * parameter. Qubic Wallet requires both the message and the connected sender.
@@ -76,6 +88,11 @@ export function createStarterWalletConnectConnector(
   const listeners = new Map<WalletConnectorEvent, Set<EventCallback>>();
   let clientPromise: Promise<WalletConnectClient> | null = null;
   let activeAccount: WalletAccount | null = null;
+
+  function withActiveSender(transaction: TransactionRequest) {
+    if (!activeAccount) throw new Error("WalletConnect: no active account");
+    return { ...transaction, from: activeAccount.identity };
+  }
 
   function emit(event: WalletConnectorEvent, payload?: unknown) {
     for (const callback of listeners.get(event) ?? []) callback(payload);
@@ -130,9 +147,20 @@ export function createStarterWalletConnectConnector(
   function accountFromSession(
     session: WalletConnectSession,
   ): WalletAccount | null {
-    const account = session.namespaces.qubic?.accounts[0];
-    const identity = account?.split(":").at(-1);
-    return identity ? { identity: identity as Identity } : null;
+    const methods = new Set(session.namespaces.qubic?.methods);
+    if (
+      !Object.values(walletConnectMethods).every((method) =>
+        methods.has(method),
+      )
+    ) {
+      return null;
+    }
+    const account = session.namespaces.qubic?.accounts.find((value) =>
+      value.startsWith(`${chainId}:`),
+    );
+    const identity =
+      account && parseIdentity(account.slice(chainId.length + 1));
+    return identity ? { identity } : null;
   }
 
   async function request<T>(method: string, params: unknown) {
@@ -176,10 +204,10 @@ export function createStarterWalletConnectConnector(
       if (uri) connectOptions?.onUri?.(uri);
 
       const session = await approval();
-      saveTopic(session.topic);
       const account = accountFromSession(session);
       if (!account)
         throw new Error("WalletConnect: no account in session namespaces");
+      saveTopic(session.topic);
       activeAccount = account;
       return account;
     },
@@ -194,8 +222,10 @@ export function createStarterWalletConnectConnector(
         );
         const account = accounts[0];
         if (!account) return null;
+        const identity = parseIdentity(account.address);
+        if (!identity) return null;
         const resolvedAccount = {
-          identity: account.address as Identity,
+          identity,
           ...(account.alias ? { name: account.alias } : {}),
         };
         activeAccount = resolvedAccount;
@@ -225,13 +255,13 @@ export function createStarterWalletConnectConnector(
     sendTransaction: (transaction: TransactionRequest) =>
       request<SendTransactionResult>(
         walletConnectMethods.sendTransaction,
-        transaction,
+        withActiveSender(transaction),
       ),
 
     signTransaction: (transaction: TransactionRequest) =>
       request<SignTransactionResult>(
         walletConnectMethods.signTransaction,
-        transaction,
+        withActiveSender(transaction),
       ),
 
     async signMessage(message: string) {

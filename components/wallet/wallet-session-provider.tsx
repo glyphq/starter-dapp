@@ -58,15 +58,17 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   const [pairingUri, setPairingUri] = useState<string | null>(null);
   const [dismissedWalletError, setDismissedWalletError] = useState<unknown>();
   const accountKey = `${wallet.activeConnector?.id ?? "none"}:${wallet.account?.identity ?? "none"}`;
-  const [previousAccountKey, setPreviousAccountKey] = useState(accountKey);
+  const previousAccountKey = useRef(accountKey);
   const inFlight = useRef(false);
   const [, refreshReadiness] = useState(0);
 
   // WalletProvider.connect reports rejection through wallet.error, not a rejected
   // promise. Only an observed account transition establishes successful connection.
-  if (previousAccountKey !== accountKey) {
-    const previousIdentity = previousAccountKey.split(":")[1];
-    setPreviousAccountKey(accountKey);
+  useEffect(() => {
+    if (previousAccountKey.current === accountKey) return;
+
+    const previousIdentity = previousAccountKey.current.split(":")[1];
+    previousAccountKey.current = accountKey;
     setDialogOpen(false);
     setPairingUri(null);
     setError(null);
@@ -76,7 +78,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
         (previousIdentity === "none" ? null : previousIdentity),
     );
     setNotice(wallet.account ? "Wallet connected." : "Wallet disconnected.");
-  }
+  }, [accountKey, wallet.account]);
 
   useEffect(() => {
     const onStatus = (event: Event) =>

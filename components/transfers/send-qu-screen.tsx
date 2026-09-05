@@ -19,6 +19,8 @@ export function SendQusScreen() {
   } = useWalletSession();
   const [destination, setDestination] = useState("");
   const [amount, setAmount] = useState("");
+  const [destinationInvalid, setDestinationInvalid] = useState(false);
+  const [amountInvalid, setAmountInvalid] = useState(false);
   const [working, setWorking] = useState(false);
   const connected = Boolean(wallet.account && wallet.activeConnector);
   const isGlyph = wallet.activeConnector?.id === "glyph-wallet";
@@ -38,13 +40,17 @@ export function SendQusScreen() {
     try {
       transfer = prepareSendQus(destination, amount);
     } catch (reason) {
-      toast.error(
+      const message =
         reason instanceof Error
           ? reason.message
-          : "Check the destination and amount, then try again.",
-      );
+          : "Check the destination and amount, then try again.";
+      setDestinationInvalid(message.startsWith("Recipient"));
+      setAmountInvalid(message.startsWith("Amount"));
+      toast.error(message);
       return;
     }
+    setDestinationInvalid(false);
+    setAmountInvalid(false);
 
     setWorking(true);
     try {
@@ -111,11 +117,15 @@ export function SendQusScreen() {
             id="send-qu-recipient"
             value={destination}
             disabled={busy}
+            aria-invalid={destinationInvalid || undefined}
             placeholder="Qubic identity"
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}
-            onChange={(event) => setDestination(event.target.value)}
+            onChange={(event) => {
+              setDestination(event.target.value);
+              setDestinationInvalid(false);
+            }}
           />
         </label>
         <label htmlFor="send-qu-amount">
@@ -125,11 +135,16 @@ export function SendQusScreen() {
             inputMode="numeric"
             value={amount}
             disabled={busy}
+            aria-invalid={amountInvalid || undefined}
+            aria-describedby="send-qu-amount-help"
             placeholder="1000000"
             autoComplete="off"
-            onChange={(event) => setAmount(event.target.value)}
+            onChange={(event) => {
+              setAmount(event.target.value);
+              setAmountInvalid(false);
+            }}
           />
-          <span className="field-help">
+          <span className="field-help" id="send-qu-amount-help">
             Check the destination before approving the transfer in your wallet.
           </span>
         </label>

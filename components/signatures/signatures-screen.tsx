@@ -31,6 +31,8 @@ export function SignaturesScreen() {
   const [signatureInput, setSignatureInput] = useState("");
   const [resultAccount, setResultAccount] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
+  const [messageInvalid, setMessageInvalid] = useState(false);
+  const [signatureInvalid, setSignatureInvalid] = useState(false);
   const [working, setWorking] = useState(false);
   const inFlight = useRef(false);
   const busy = working || pendingAction !== null;
@@ -38,11 +40,6 @@ export function SignaturesScreen() {
   const isGlyph = wallet.activeConnector?.id === "glyph-wallet";
 
   const accountKey = `${wallet.activeConnector?.id ?? "none"}:${wallet.account?.identity ?? "none"}`;
-  const [previousAccountKey, setPreviousAccountKey] = useState(accountKey);
-  if (accountKey !== previousAccountKey) {
-    setPreviousAccountKey(accountKey);
-    setSignature(null);
-  }
 
   function clearResults() {
     setSignature(null);
@@ -51,6 +48,8 @@ export function SignaturesScreen() {
   function switchMode(nextMode: SignatureMode) {
     if (busy) return;
     setMode(nextMode);
+    setMessageInvalid(false);
+    setSignatureInvalid(false);
     clearResults();
   }
 
@@ -63,9 +62,13 @@ export function SignaturesScreen() {
       nextMode === "verify" ? signatureInput : undefined,
     );
     if (validationError) {
+      setMessageInvalid(validationError === "Enter a message.");
+      setSignatureInvalid(validationError !== "Enter a message.");
       toast.error(validationError);
       return;
     }
+    setMessageInvalid(false);
+    setSignatureInvalid(false);
     const account = wallet.account;
     if (!account || !wallet.activeConnector) {
       openWalletDialog();
@@ -194,10 +197,12 @@ export function SignaturesScreen() {
             rows={4}
             value={message}
             disabled={busy}
+            aria-invalid={messageInvalid || undefined}
             autoComplete="off"
             placeholder="Enter the exact message"
             onChange={(event) => {
               setMessage(event.target.value);
+              setMessageInvalid(false);
               clearResults();
             }}
           />
@@ -210,11 +215,13 @@ export function SignaturesScreen() {
               id="signature-hex"
               value={signatureInput}
               disabled={busy}
+              aria-invalid={signatureInvalid || undefined}
               placeholder="128 hexadecimal characters"
               autoComplete="off"
               spellCheck={false}
               onChange={(event) => {
                 setSignatureInput(event.target.value);
+                setSignatureInvalid(false);
                 clearResults();
               }}
             />

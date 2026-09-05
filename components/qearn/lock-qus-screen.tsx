@@ -22,6 +22,7 @@ export function LockQusScreen() {
     openWalletDialog,
   } = useWalletSession();
   const [amount, setAmount] = useState("");
+  const [amountInvalid, setAmountInvalid] = useState(false);
   const [working, setWorking] = useState(false);
   const connected = Boolean(wallet.account && wallet.activeConnector);
   const isGlyph = wallet.activeConnector?.id === "glyph-wallet";
@@ -41,6 +42,7 @@ export function LockQusScreen() {
     try {
       procedure = prepareLockQus(amount);
     } catch (reason) {
+      setAmountInvalid(true);
       toast.error(
         reason instanceof Error
           ? reason.message
@@ -48,6 +50,7 @@ export function LockQusScreen() {
       );
       return;
     }
+    setAmountInvalid(false);
 
     setWorking(true);
     try {
@@ -128,11 +131,16 @@ export function LockQusScreen() {
             inputMode="numeric"
             value={amount}
             disabled={busy}
+            aria-invalid={amountInvalid || undefined}
+            aria-describedby="lock-qus-amount-help"
             placeholder="1000000"
             autoComplete="off"
-            onChange={(event) => setAmount(event.target.value)}
+            onChange={(event) => {
+              setAmount(event.target.value);
+              setAmountInvalid(false);
+            }}
           />
-          <span className="field-help">
+          <span className="field-help" id="lock-qus-amount-help">
             Whole QUs only. Your wallet shows the final request.
           </span>
         </label>

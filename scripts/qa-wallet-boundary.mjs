@@ -52,6 +52,7 @@ try {
         account = null;
       },
       async sendTransaction(request) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
         contractRequests.push(request);
         return {
           txId: "fixture-transaction",
@@ -118,7 +119,13 @@ try {
     ".signatures-screen #signature-message",
   );
   await messageDraft.waitFor({ state: "attached" });
+  await taskDialog
+    .getByRole("button", { name: "Sign message", exact: true })
+    .click();
+  await page.getByText("Enter a message.", { exact: true }).waitFor();
+  assert.equal(await messageDraft.getAttribute("aria-invalid"), "true");
   await messageDraft.fill("Starter round-trip fixture");
+  assert.equal(await messageDraft.getAttribute("aria-invalid"), null);
   await page.screenshot({
     path: "artifacts/screenshots/sign-connected.png",
     fullPage: true,
@@ -142,6 +149,18 @@ try {
   await lockDialog
     .getByRole("button", { name: "Lock QUs", exact: true })
     .click();
+  await page.waitForFunction(
+    () => document.querySelector("#lock-qus-amount")?.disabled === true,
+  );
+  assert.equal(await lockDialog.locator("#lock-qus-amount").isDisabled(), true);
+  assert.equal(
+    await lockDialog
+      .locator("#lock-qus-amount")
+      .evaluate((element) => getComputedStyle(element).cursor),
+    "not-allowed",
+  );
+  await lockDialog.getByRole("button", { name: "Close", exact: true }).click();
+  assert.equal(await lockDialog.count(), 1);
   assert.equal(
     await lockDialog
       .getByText("Lock request approved.", { exact: true })
@@ -255,12 +274,10 @@ try {
   );
   await page.setViewportSize({ width: 390, height: 844 });
   const accessibility = await new AxeBuilder({ page }).analyze();
-  assert.equal(
-    accessibility.violations.filter((item) =>
-      ["serious", "critical"].includes(item.impact),
-    ).length,
-    0,
+  const seriousAccessibilityViolations = accessibility.violations.filter(
+    (item) => ["serious", "critical"].includes(item.impact),
   );
+  assert.equal(seriousAccessibilityViolations.length, 0);
   assert.equal(
     await dialog.evaluate(
       (element) => element.scrollWidth > element.clientWidth,
@@ -292,6 +309,9 @@ try {
       rejectionKeepsChooserOpen: true,
       retryConnects: true,
       connectShowsSigningForm: true,
+      validationFeedbackMarksTheAffectedField: true,
+      pendingTaskCannotBeDismissed: true,
+      disabledInputsHaveAnExplicitVisualState: true,
       extensionRequestsIncludeActiveSender: true,
       lockAndDirectTransferRequestsUseReviewedInputs: true,
       disconnectClearsSession: true,

@@ -11,7 +11,10 @@ afterEach(() => {
 });
 
 describe("starter WalletConnect connector", () => {
-  test("sends qubic_sign with the connected sender and map-shaped message Qubic Wallet expects", async () => {
+  const identity =
+    "FXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAYKSC";
+
+  test("sends the active identity with signing and transaction requests", async () => {
     const values = new Map<string, string>();
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -30,8 +33,13 @@ describe("starter WalletConnect connector", () => {
             topic: "fixture-topic",
             namespaces: {
               qubic: {
-                accounts: ["qubic:mainnet:A".repeat(1)],
-                methods: [],
+                accounts: [`qubic:mainnet:${identity}`],
+                methods: [
+                  "qubic_requestAccounts",
+                  "qubic_signTransaction",
+                  "qubic_sendQubic",
+                  "qubic_sign",
+                ],
                 events: [],
               },
             },
@@ -58,6 +66,18 @@ describe("starter WalletConnect connector", () => {
       signatureHex: "ab".repeat(64),
       digestHex: "cd".repeat(32),
     });
+    await connector.sendTransaction({
+      destination:
+        "JAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVKHO",
+      amount: "1000000",
+      inputType: 1,
+    });
+    await connector.signTransaction({
+      destination:
+        "JAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVKHO",
+      amount: "1000000",
+      inputType: 1,
+    });
     expect(requests).toEqual([
       {
         topic: "fixture-topic",
@@ -65,11 +85,122 @@ describe("starter WalletConnect connector", () => {
         request: {
           method: "qubic_sign",
           params: {
-            from: "A",
+            from: identity,
             message: "Map-shaped signing message",
           },
         },
       },
+      {
+        topic: "fixture-topic",
+        chainId: "qubic:mainnet",
+        request: {
+          method: "qubic_sendQubic",
+          params: {
+            from: identity,
+            destination:
+              "JAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVKHO",
+            amount: "1000000",
+            inputType: 1,
+          },
+        },
+      },
+      {
+        topic: "fixture-topic",
+        chainId: "qubic:mainnet",
+        request: {
+          method: "qubic_signTransaction",
+          params: {
+            from: identity,
+            destination:
+              "JAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVKHO",
+            amount: "1000000",
+            inputType: 1,
+          },
+        },
+      },
     ]);
+  });
+
+  test("rejects sessions without all requested capabilities", async () => {
+    const values = new Map<string, string>();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    });
+
+    const connector = createStarterWalletConnectConnector({
+      createClient: async () => ({
+        connect: async () => ({
+          approval: async () => ({
+            topic: "invalid-topic",
+            namespaces: {
+              qubic: {
+                accounts: [`qubic:mainnet:${identity}`],
+                methods: [],
+                events: [],
+              },
+            },
+          }),
+        }),
+        disconnect: async () => {},
+        request: async <T>() => [] as T,
+        session: { get: () => undefined },
+        on: () => {},
+        off: () => {},
+      }),
+    });
+
+    await expect(connector.connect()).rejects.toThrow(
+      "WalletConnect: no account in session namespaces",
+    );
+    expect(values.get("qubic-wc-session")).toBeUndefined();
+  });
+
+  test("rejects non-mainnet or malformed session identities", async () => {
+    const values = new Map<string, string>();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+      },
+    });
+
+    const connector = createStarterWalletConnectConnector({
+      createClient: async () => ({
+        connect: async () => ({
+          approval: async () => ({
+            topic: "invalid-account-topic",
+            namespaces: {
+              qubic: {
+                accounts: ["qubic:testnet:not-an-identity"],
+                methods: [
+                  "qubic_requestAccounts",
+                  "qubic_signTransaction",
+                  "qubic_sendQubic",
+                  "qubic_sign",
+                ],
+                events: [],
+              },
+            },
+          }),
+        }),
+        disconnect: async () => {},
+        request: async <T>() => [] as T,
+        session: { get: () => undefined },
+        on: () => {},
+        off: () => {},
+      }),
+    });
+
+    await expect(connector.connect()).rejects.toThrow(
+      "WalletConnect: no account in session namespaces",
+    );
+    expect(values.get("qubic-wc-session")).toBeUndefined();
   });
 });
