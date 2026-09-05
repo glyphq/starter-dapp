@@ -887,15 +887,20 @@ select {
   }
 }
 
-/* Full-bleed hero sits behind the resting Explorer-style navigation. */
+/* Full-bleed hero sits behind the resting Explorer-style navigation.
+ * Use its full-width parent rather than `100vw`, which includes a classic
+ * vertical scrollbar and creates a horizontal scroll range. */
 .workspace-main {
-  margin-top: -72px;
+  width: 100%;
+  max-width: none;
+  margin: -72px 0 0;
+  padding: 0;
 }
 .starter-hero {
-  width: 100vw;
+  width: 100%;
+  margin-left: 0;
   height: 100dvh;
   min-height: 100dvh;
-  margin-left: calc(50% - 50vw);
   align-items: center;
   justify-content: center;
   border: 0;

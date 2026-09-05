@@ -145,11 +145,16 @@ for (const viewport of [
     .count();
   const heroFullBleed = await page
     .locator(".starter-hero")
-    .evaluate(
-      (element) =>
-        Math.round(element.getBoundingClientRect().width) ===
-          window.innerWidth && element.getBoundingClientRect().top <= 0,
-    );
+    .evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const viewportWidth = document.documentElement.clientWidth;
+      return (
+        Math.round(bounds.width) === viewportWidth &&
+        Math.round(bounds.left) === 0 &&
+        Math.round(bounds.right) === viewportWidth &&
+        bounds.top <= 0
+      );
+    });
   observations.push({
     viewport: viewport.name,
     screen: "hero-actions",
