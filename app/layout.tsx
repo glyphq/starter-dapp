@@ -5,7 +5,7 @@ import "@fontsource/geist/500.css";
 import "@fontsource/geist/600.css";
 import "@fontsource/geist-mono/400.css";
 import "./globals.css";
-import { Providers } from "@/components/Providers";
+import { AppProviders } from "@/components/app-providers";
 
 const appOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN?.trim();
 
@@ -35,7 +35,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <Script id="glyph-custom-protocol-abort-guard" strategy="beforeInteractive">
           {`window.addEventListener("unhandledrejection",function(event){var reason=event.reason;if(reason&&typeof reason==="object"&&reason.name==="AbortError"&&reason.message==="The user aborted a request."){event.preventDefault();}},true);`}
         </Script>
-        <Providers>{children}</Providers>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

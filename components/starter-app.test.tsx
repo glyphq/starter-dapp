@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isGlyphLaunchAbort, referenceFlows } from "./StarterApp";
+import { isGlyphLaunchAbort, referenceFlows } from "./starter-app";
 
 describe("Qubic reference workspace", () => {
   test("names exactly the three approved flows without a sidebar or starter branding", () => {

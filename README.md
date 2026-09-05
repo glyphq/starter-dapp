@@ -124,8 +124,8 @@ page:
 | File | Customization point |
 | --- | --- |
 | `app/page.tsx` | Replace the reference screen with the application's route entry. |
-| `components/StarterApp.tsx` | Change the wallet workspace, forms, and action orchestration. |
-| `components/Providers.tsx` | Configure `QubicProvider`, `WalletProvider`, the live client, and the browser storage key. |
+| `components/starter-app.tsx` | Change the wallet workspace, forms, and action orchestration. |
+| `components/app-providers.tsx` | Configure `QubicProvider`, `WalletProvider`, the live client, and the browser storage key. |
 | `lib/connectors/index.ts` | Register, remove, or configure connector instances. Keep optional configuration client-safe. |
 | `lib/connectors/glyph.ts` | Keep or replace the isolated Glyph Relay v2 adapter and its native transfer/sign/verify requests. |
 | `app/globals.css` | Replace the reference visual system without changing connector behavior. |
@@ -139,7 +139,7 @@ connector does.
 
 ### Start with one action
 
-For message signing, follow `signMessage()` in `components/StarterApp.tsx`:
+For message signing, follow `signMessage()` in `components/starter-app.tsx`:
 
 1. Read the connected account and connector with `useWallet()`.
 2. For Glyph, check `isGlyphRelaySessionReady()`. If it is not ready, prepare

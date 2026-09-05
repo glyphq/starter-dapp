@@ -7,7 +7,7 @@ import { connectors } from "@/lib/connectors";
 
 const liveClient = createLiveClient();
 
-export function Providers({ children }: { children: ReactNode }) {
+export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QubicProvider liveClient={liveClient}>
       <WalletProvider connectors={connectors} storageKey="glyph-starter-connector">

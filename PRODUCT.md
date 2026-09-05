@@ -49,8 +49,8 @@ pretending that every connector has identical capabilities.
 ## Customization points
 
 - `app/page.tsx`: replace the reference route entry.
-- `components/StarterApp.tsx`: replace the demo workspace and action forms.
-- `components/Providers.tsx`: configure providers, the live client, and local
+- `components/starter-app.tsx`: replace the demo workspace and action forms.
+- `components/app-providers.tsx`: configure providers, the live client, and local
   connector persistence.
 - `lib/connectors/index.ts`: register or remove connector instances and keep
   optional configuration client-safe.
