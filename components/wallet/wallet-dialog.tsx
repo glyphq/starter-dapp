@@ -1,6 +1,13 @@
 "use client";
 
 import Image from "next/image";
+import {
+  ArrowRightIcon,
+  ArrowUpRightIcon,
+  PuzzleIcon,
+  QrCodeIcon,
+  WalletIcon,
+} from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Dialog,
@@ -36,10 +43,13 @@ export function WalletDialog() {
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogContent className="wallet-dialog">
+        <div className="chooser-symbol" aria-hidden="true">
+          <WalletIcon size={24} />
+        </div>
         <DialogHeader>
           <DialogTitle>Connect a wallet</DialogTitle>
           <DialogDescription>
-            Choose how to connect. Your keys never leave your wallet.
+            Your wallet, your way. Choose one to get started.
           </DialogDescription>
         </DialogHeader>
         <div className="connector-list">
@@ -63,16 +73,29 @@ export function WalletDialog() {
                 key={connector.id}
               >
                 <span className="wallet-option-heading">
-                  {glyph && (
-                    <Image
-                      className="glyph-mark"
-                      src="/brand/glyph-mark.png"
-                      alt=""
-                      width={24}
-                      height={24}
-                    />
-                  )}
+                  <span className="provider-symbol" aria-hidden="true">
+                    {glyph ? (
+                      <Image
+                        className="glyph-mark"
+                        src="/brand/glyph-mark.png"
+                        alt=""
+                        width={26}
+                        height={26}
+                      />
+                    ) : connector.id === "walletconnect" ? (
+                      <QrCodeIcon size={24} />
+                    ) : (
+                      <PuzzleIcon size={24} />
+                    )}
+                  </span>
                   <strong>{connectorLabel(connector.id)}</strong>
+                  <span className="provider-action" aria-hidden="true">
+                    {availability.available ? (
+                      <ArrowRightIcon size={18} />
+                    ) : (
+                      <span className="provider-unavailable-dot" />
+                    )}
+                  </span>
                 </span>
                 {pendingAction && availability.available ? (
                   <LoadingIcon />
@@ -84,6 +107,15 @@ export function WalletDialog() {
             <p className="notice">No wallets available.</p>
           )}
         </div>
+        <div className="wallet-discovery">
+          <span>New to Qubic?</span>
+          <a href="https://docs.glyphq.org" target="_blank" rel="noreferrer">
+            Explore wallets <ArrowUpRightIcon size={15} aria-hidden="true" />
+          </a>
+        </div>
+        <p className="chooser-safety">
+          Your keys stay in your wallet. You approve every request.
+        </p>
         {pairingUri && (
           <div className="pairing-box">
             <QRCodeSVG
