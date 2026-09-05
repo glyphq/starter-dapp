@@ -3,9 +3,12 @@ import { referenceFlows } from "./starter-app";
 import { isGlyphLaunchAbort } from "@/lib/connectors/glyph-launch";
 
 describe("Qubic reference workspace", () => {
-  test("names exactly the three approved flows without a sidebar or starter branding", () => {
-    expect(referenceFlows.map((flow) => flow.label)).toEqual(["Connect", "RandomLottery", "Sign & Verify"]);
-    expect(referenceFlows).toHaveLength(3);
+  test("offers two task-first examples with account management outside navigation", () => {
+    expect(referenceFlows.map((flow) => flow.label)).toEqual([
+      "Sign & Verify",
+      "RandomLottery",
+    ]);
+    expect(referenceFlows).toHaveLength(2);
   });
 
   test("suppresses only Chromium's known custom-protocol launch abort", () => {
@@ -13,7 +16,11 @@ describe("Qubic reference workspace", () => {
     abort.name = "AbortError";
 
     expect(isGlyphLaunchAbort(abort)).toBe(true);
-    expect(isGlyphLaunchAbort(new Error("The user aborted a request."))).toBe(false);
-    expect(isGlyphLaunchAbort(new Error("A different request failed."))).toBe(false);
+    expect(isGlyphLaunchAbort(new Error("The user aborted a request."))).toBe(
+      false,
+    );
+    expect(isGlyphLaunchAbort(new Error("A different request failed."))).toBe(
+      false,
+    );
   });
 });

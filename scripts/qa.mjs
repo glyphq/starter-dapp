@@ -84,8 +84,10 @@ for (const viewport of [
 
   await page.getByRole("navigation", { name: "Reference flows" }).getByRole("button", { name: /Sign & Verify/ }).click();
   await page.getByRole("heading", { name: "Sign & Verify" }).waitFor();
-  const walletRequired = await page.getByText("Wallet required", { exact: true }).isVisible();
+  const walletRequired = await page.getByRole("button", { name: "Connect to sign", exact: true }).isVisible();
+  const draftVisible = await page.getByLabel("Message", { exact: true }).isVisible();
   const signingControls = await page.getByRole("button", { name: /^(Sign message|Verify signature)$/ }).count();
+  if (!draftVisible) failures.push({ viewport: viewport.name, draftVisible });
   const signingResults = await new AxeBuilder({ page }).analyze();
   const signingSerious = signingResults.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""));
   observations.push({ viewport: viewport.name, screen: "Sign & Verify", walletRequired, signingControls, seriousAccessibilityIssues: signingSerious.length });

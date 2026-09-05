@@ -12,8 +12,8 @@ A minimal, reusable Next.js reference for connecting Qubic wallets.
 
 This repository is a small, inspectable starting point for a Qubic dApp. It
 keeps the shared wallet wiring in `@qubic.org/react`, registers three connector
-paths, and demonstrates three screens: **Connect**, **RandomLottery**, and
-**Sign & Verify**. A transfer helper is available in the adapter, but there
+paths, and demonstrates two task-first examples: **Sign & Verify** and
+**RandomLottery**. Connection and account management live in header dialogs. A transfer helper is available in the adapter, but there
 is no standalone transfer form in the reference UI.
 
 The included Glyph Wallet adapter is one example connector, not the product
@@ -140,7 +140,7 @@ page:
 | File | Customization point |
 | --- | --- |
 | `app/page.tsx` | Replace the reference screen with the application's route entry. |
-| `components/starter-app.tsx` | Compose the shell and three feature screens. Keep form state out of the shell. |
+| `components/starter-app.tsx` | Compose the shell and two feature screens. Keep form state out of the shell. |
 | `components/app-providers.tsx` | Configure `QubicProvider`, `WalletProvider`, the live client, and the browser storage key. |
 | `components/wallet/wallet-session-provider.tsx` | Coordinate shared requests and connection feedback. |
 | `components/signatures/signatures-screen.tsx` | Adapt message signing and verification. |

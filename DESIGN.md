@@ -1,8 +1,8 @@
 # Interface and state design
 
-## Three focused flows
+## Two task-first examples
 
-Connect, RandomLottery, and Sign & Verify share a compact shell, wallet chooser,
+Sign & Verify and RandomLottery share a compact shell, wallet chooser,
 account details modal, and persistent theme. The UI uses local Geist fonts, monochrome
 surfaces, readable state labels, keyboard focus, and responsive action groups.
 Unconfigured connectors are hidden. Missing extensions remain disabled, without
@@ -59,3 +59,13 @@ one prompt and action. Header/footer accents use static CSS dot patterns with
 gradient masks, no effects dependency or animation. Decorations do not intercept
 pointer input and are hidden in forced-color mode. Contract approval and price
 review warnings remain intact.
+
+## Task-first progression
+
+Sign & Verify is the entry screen. Users can draft a message before connecting.
+Connection does not discard the draft or automatically request a signature.
+After signing, Verify this signature transfers the exact output into the verify
+form. Results remain bound to the submitting account, including late responses.
+Drafts reset when switching examples or reloading, not when connecting.
+The separate Connect landing page is removed. RandomLottery remains an explicit
+paid mainnet example with unchanged review and approval checks.

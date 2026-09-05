@@ -258,23 +258,14 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .workspace-footer { padding-block: 20px 4px; margin-top: 48px; }
 .footer-signature { display: inline-flex; align-items: center; gap: 9px; }
 .footer-mark { width: 18px; height: 18px; background: radial-gradient(var(--text-muted) 1px, transparent 1.2px) 0 0 / 4px 4px; mask-image: linear-gradient(135deg, #000, transparent); }
-.connect-landing { position: relative; isolation: isolate; padding: 54px 0; overflow: hidden; }
-.connect-landing > :not(.connect-art) { position: relative; }
-.connect-landing .flow-heading { margin-block: 20px 24px; }
-.connect-landing .flow-heading h2 { font-size: clamp(28px, 4vw, 40px); }
-.connect-landing .safety-note { margin-top: 16px; padding-top: 0; }
-.connect-art { position: absolute; z-index: -1; pointer-events: none; width: 240px; height: 240px; right: 4%; top: 20px; opacity: .23; border-radius: 50%; background: radial-gradient(var(--text-muted) 1px, transparent 1.2px) 0 0 / 5px 5px; mask-image: radial-gradient(circle at 65% 35%, #000 5%, transparent 65%); }
 @media (max-width: 640px) {
   .workspace-header { min-height: 72px; }
   .workspace-brand strong { font-size: 17px; }
   .brand-caption { display: none; }
   .workspace-main { padding-top: 16px; }
-  .connect-art { right: -130px; opacity: .12; }
-  .connect-landing { padding-block: 24px; }
 }
-@media (forced-colors: active) { .connect-art, .footer-mark, .workspace-header::after { display: none; } }
+@media (forced-colors: active) { .footer-mark, .workspace-header::after { display: none; } }
 
-.connect-landing > [data-slot="button"] { min-height: 44px; padding-inline: 20px; }
 
 /* Inset shell chrome, separate from the open task surfaces. */
 .workspace-header { width: min(calc(100% - 48px), 1120px); margin: 20px auto 0; padding: 16px 24px; min-height: 76px; border: 1px solid var(--border); border-radius: 24px; background: var(--surface); box-shadow: 0 8px 28px rgb(0 0 0 / .08); overflow: hidden; }
@@ -287,3 +278,11 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 
 .workspace-header { min-height: 64px; padding-block: 10px; }
 @media (max-width: 640px) { .workspace-header { min-height: 60px; padding-block: 8px; } }
+
+.flow-panel { max-width: 760px; margin-inline: auto; }
+.flow-stage { padding-top: 12px; }
+.signatures-screen .flow-heading { margin-bottom: 24px; }
+.signatures-screen .notice { background: transparent; border: 0; padding: 0; font-size: 12px; color: var(--text-muted); }
+.signature-next { margin-top: 16px; }
+.signatures-screen [data-slot="tabs-trigger"] { color: var(--text-muted); }
+.signatures-screen [data-slot="tabs-trigger"][aria-selected="true"] { color: var(--text); }

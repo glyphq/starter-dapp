@@ -8,16 +8,14 @@ import { useLotteryPurchase } from "@/hooks/use-lottery-purchase";
 import { useTheme } from "@/hooks/use-theme";
 import { useWalletSession } from "@/components/wallet/wallet-session-provider";
 import { AccountDialog } from "@/components/wallet/account-dialog";
-import { ConnectScreen } from "@/components/wallet/connect-screen";
 import { WalletDialog } from "@/components/wallet/wallet-dialog";
 import { RequestStatus } from "@/components/wallet/request-status";
 import { RandomLotteryScreen } from "@/components/random-lottery/random-lottery-screen";
 import { SignaturesScreen } from "@/components/signatures/signatures-screen";
 
 export const referenceFlows = [
-  { id: "connect", label: "Connect" },
-  { id: "random-lottery", label: "RandomLottery" },
   { id: "sign-verify", label: "Sign & Verify" },
+  { id: "random-lottery", label: "RandomLottery" },
 ] as const;
 type Flow = (typeof referenceFlows)[number]["id"];
 
@@ -27,7 +25,7 @@ export function StarterApp() {
     useWalletSession();
   const { theme, toggleTheme } = useTheme();
   const purchaseState = useLotteryPurchase();
-  const [flow, setFlow] = useState<Flow>("connect");
+  const [flow, setFlow] = useState<Flow>("sign-verify");
   const sessionKey = `${wallet.activeConnector?.id ?? "none"}:${wallet.account?.identity ?? "none"}`;
   function navigate(next: Flow) {
     if (pendingAction) return;
@@ -43,7 +41,7 @@ export function StarterApp() {
         <button
           className="workspace-brand"
           type="button"
-          onClick={() => navigate("connect")}
+          onClick={() => navigate("sign-verify")}
           disabled={Boolean(pendingAction)}
           aria-label="Glyph Starter home"
         >
@@ -56,7 +54,6 @@ export function StarterApp() {
           />
           <span>
             <strong>Glyph Starter</strong>
-
           </span>
         </button>
         <div className="workspace-header-actions">
@@ -94,11 +91,13 @@ export function StarterApp() {
             </button>
           ))}
         </nav>
-        <div className="flow-stage" key={sessionKey}>
+        <div className="flow-stage">
           <RequestStatus />
-          {flow === "connect" && <ConnectScreen />}
           {flow === "random-lottery" && (
-            <RandomLotteryScreen purchaseState={purchaseState} />
+            <RandomLotteryScreen
+              key={sessionKey}
+              purchaseState={purchaseState}
+            />
           )}
           {flow === "sign-verify" && <SignaturesScreen />}
         </div>

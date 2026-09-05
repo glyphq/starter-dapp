@@ -32,6 +32,9 @@ try {
           name: "QA public identity fixture",
         };
       },
+      async signMessage() {
+        return { signatureHex: "ab".repeat(64) };
+      },
       async getAccount() {
         return account;
       },
@@ -45,7 +48,10 @@ try {
   });
   await page.goto(process.env.QA_BASE_URL ?? "http://127.0.0.1:4174");
   await page
-    .getByRole("button", { name: "Connect wallet", exact: true })
+    .getByLabel("Message", { exact: true })
+    .fill("Starter round-trip fixture");
+  await page
+    .getByRole("button", { name: "Connect to sign", exact: true })
     .click();
   const connect = page.getByRole("button", { name: /Connect Qubic/ });
   await connect.click();
@@ -63,6 +69,19 @@ try {
   await connect.click();
   await page.getByRole("button", { name: "Open account details" }).waitFor();
   assert.equal(await page.getByRole("dialog").count(), 0);
+  assert.equal(
+    await page.getByLabel("Message", { exact: true }).inputValue(),
+    "Starter round-trip fixture",
+  );
+  await page.getByRole("button", { name: "Sign message", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Verify this signature", exact: true })
+    .click();
+  assert.equal(
+    await page.getByLabel("Signature", { exact: true }).inputValue(),
+    "ab".repeat(64),
+  );
+
   await page.getByRole("button", { name: "Open account details" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("heading", { name: "Account details" }).waitFor();

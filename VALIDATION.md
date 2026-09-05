@@ -100,3 +100,14 @@ without horizontal overflow, zero serious/critical axe findings, Escape focus
 restoration, and disconnect clearing session. It also retains rejection/retry
 coverage. Balance loading uses the real RPC client in production, but this fixture
 is not evidence of a live balance response or native wallet approval.
+
+## Task-first flow iteration
+
+The starter now opens on Sign & Verify with two example tabs rather than a Connect
+landing page. The production suite passes at four viewport/theme combinations.
+The synthetic extension fixture additionally confirms that a typed message survives
+connection and signed output is copied exactly into verification by its next-action
+button. The fixture does not prove a real signature or approval. Result displays
+are bound to the original connector/account to reject late cross-account output.
+74 tests and production build pass. Exposing the form uncovered tab contrast and
+textarea-label regressions, both fixed and checked by the final browser run.
