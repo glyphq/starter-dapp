@@ -3,7 +3,6 @@
 import Image from "next/image";
 import {
   ArrowRightIcon,
-  PuzzleIcon,
   QrCodeIcon,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -80,7 +79,7 @@ export function WalletDialog() {
                     ) : connector.id === "walletconnect" ? (
                       <QrCodeIcon size={24} />
                     ) : (
-                      <PuzzleIcon size={24} />
+                      <Image src="/brand/qubic-extension.svg" alt="" width={18} height={30} />
                     )}
                   </span>
                   <strong>{connectorLabel(connector.id)}</strong>
