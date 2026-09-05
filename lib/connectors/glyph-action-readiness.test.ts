@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 const events: string[] = [];
+let resultOverride: Record<string, unknown> | null = null;
 const identity = "A".repeat(60);
 const preparedSession = {
   session: "session-action-123456789012345",
@@ -63,6 +64,7 @@ mock.module("@glyph-oss/connect", () => ({
   subscribeViaRelayV2: (request: { type: string }, session: typeof preparedSession) => {
     expect(session.registered).toBe(true);
     events.push(`subscribe:${request.type}`);
+    if (resultOverride) return Promise.resolve(resultOverride);
     if (request.type === "sign_message") {
       return Promise.resolve({
         status: "signed",
@@ -112,6 +114,7 @@ const {
   createGlyphRequestIntentHandlers,
   glyphConnector,
   isGlyphRelaySessionReady,
+  prepareFreshGlyphRelaySession,
   prewarmGlyphRelaySession,
   requestGlyphScCall,
   requestGlyphTransfer,
@@ -121,7 +124,22 @@ const {
 describe("Glyph action relay readiness", () => {
   beforeEach(() => {
     events.length = 0;
+    resultOverride = null;
     localStorageValue = JSON.stringify({ identity, name: "Glyph Wallet" });
+  });
+
+  test("handles failed fresh preparation and allows the next deliberate retry", async () => {
+    const preparing = prepareFreshGlyphRelaySession();
+    nextPreparation.reject(new Error("relay unavailable"));
+    await expect(preparing).rejects.toThrow("relay unavailable");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(isGlyphRelaySessionReady()).toBe(false);
+
+    const retry = prewarmGlyphRelaySession();
+    nextPreparation.resolve(preparedSession);
+    await retry;
+    expect(isGlyphRelaySessionReady()).toBe(true);
+    await glyphConnector.signMessage("Consume the retry session");
   });
 
   test("prepares Sign and Verify from deliberate action clicks before synchronous launch", async () => {
@@ -207,4 +225,24 @@ describe("Glyph action relay readiness", () => {
     })).resolves.toEqual({ txId: "tx-sc-call-123", targetTick: 456 });
     expect(events).toEqual(["prepare", "subscribe:sc_call", "launch:sc_call"]);
   });
+
+  for (const requestType of ["transfer", "sc_call"] as const) {
+    test.each([
+      { status: "rejected", type: requestType, identity },
+      { status: "connected", type: requestType, identity },
+      { status: "signed", type: requestType === "transfer" ? "sc_call" : "transfer", identity },
+      { status: "signed", type: requestType, identity: "B".repeat(60) },
+    ])(`${requestType} rejects an invalid or rejected transaction result: %j`, async (result) => {
+      const preparing = prewarmGlyphRelaySession();
+      nextPreparation.resolve(preparedSession);
+      await preparing;
+      resultOverride = { ...result, tx_hash: "untrusted-tx", target_tick: 123 };
+      const operation = requestType === "transfer"
+        ? requestGlyphTransfer(identity, "1")
+        : requestGlyphScCall({ contractIndex: 16, inputType: 1, amount: "1" });
+      await expect(operation).rejects.toThrow();
+      expect(isGlyphRelaySessionReady()).toBe(false);
+    });
+  }
+
 });

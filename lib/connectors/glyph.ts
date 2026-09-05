@@ -114,8 +114,7 @@ const GLYPH_RELAY_MAX_POLL_ATTEMPTS = 12;
 const GLYPH_RELAY_RECOVERY_TIMEOUT_MS = 3_500;
 const listeners = new Map<WalletConnectorEvent, Set<(...args: unknown[]) => void>>();
 let preparedRelaySession: GlyphPreparedRelaySession | null = null;
-let relaySessionPreparation: Promise<GlyphPreparedRelaySession> | null = null;
-let relaySessionReadiness: Promise<void> | null = null;
+let relaySessionPreparation: Promise<void> | null = null;
 let localRequestSequence = 0;
 // A relay session is single-use, but a second event handler can still reach a
 // request helper while the first request is awaiting the wallet callback. Keep
@@ -499,26 +498,21 @@ function mapRelayEvent(
  * the click path. The callback write capability remains registered before it is
  * included in any Wallet request and the read capability remains dApp-only.
  */
-function startRelaySessionPreparation(): Promise<GlyphPreparedRelaySession> {
+function startRelaySessionPreparation(): Promise<void> {
   relaySessionPreparation = glyphRelayAdapter
     .prepare()
     .then((session) => {
       preparedRelaySession = session;
-      return session;
     })
     .finally(() => {
       relaySessionPreparation = null;
     });
-  relaySessionReadiness = relaySessionPreparation.then(() => undefined).finally(() => {
-    relaySessionReadiness = null;
-  });
   return relaySessionPreparation;
 }
 
 export function prewarmGlyphRelaySession(): Promise<void> {
   if (preparedRelaySession) return Promise.resolve();
-  if (!relaySessionReadiness) startRelaySessionPreparation();
-  return relaySessionReadiness ?? Promise.resolve();
+  return relaySessionPreparation ?? startRelaySessionPreparation();
 }
 
 /**
@@ -527,11 +521,11 @@ export function prewarmGlyphRelaySession(): Promise<void> {
  */
 export function prepareFreshGlyphRelaySession(): Promise<void> {
   preparedRelaySession = null;
-  if (!relaySessionPreparation) return startRelaySessionPreparation().then(() => undefined);
+  if (!relaySessionPreparation) return startRelaySessionPreparation();
   return relaySessionPreparation.then(() => {
     preparedRelaySession = null;
     return startRelaySessionPreparation();
-  }).then(() => undefined);
+  });
 }
 
 /**
@@ -573,18 +567,12 @@ function runGlyphOperation<Result>(requestType: GlyphRequestType, operation: () 
   // activating user gesture.
   const inFlight = operation();
   inFlightGlyphRequests.set(requestType, inFlight);
-  void inFlight.then(
-    () => {
-      if (inFlightGlyphRequests.get(requestType) === inFlight) {
-        inFlightGlyphRequests.delete(requestType);
-      }
-    },
-    () => {
-      if (inFlightGlyphRequests.get(requestType) === inFlight) {
-        inFlightGlyphRequests.delete(requestType);
-      }
-    },
-  );
+  const clearInFlight = () => {
+    if (inFlightGlyphRequests.get(requestType) === inFlight) {
+      inFlightGlyphRequests.delete(requestType);
+    }
+  };
+  void inFlight.then(clearInFlight, clearInFlight);
   return inFlight;
 }
 
@@ -852,6 +840,25 @@ export function createGlyphScCallRequest(input: GlyphScCallInput): GlyphScCallRe
   return createGlyphScCallRequestForAccount(input, account);
 }
 
+function completeGlyphTransaction(
+  { result, correlation }: GlyphRequestExecution,
+  requestType: "transfer" | "sc_call",
+  account: WalletAccount,
+) {
+  if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
+  if (result.status !== "signed" || result.type !== requestType) {
+    return operationFailure(correlation, "invalid_response");
+  }
+  try {
+    assertSameIdentity(result.identity, account.identity);
+    assertValidIdentity(result.identity);
+  } catch {
+    return operationFailure(correlation, "verification_failed");
+  }
+  completeOperation(correlation);
+  return { txId: result.tx_hash, targetTick: result.target_tick };
+}
+
 export function requestGlyphTransfer(destination: string, amount: string) {
   return runGlyphOperation("transfer", async () => {
     const account = readAccount();
@@ -865,19 +872,7 @@ export function requestGlyphTransfer(destination: string, amount: string) {
         from: account.identity,
       }),
     );
-    const { result, correlation } = execution;
-    if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
-    if (result.status !== "signed" || result.type !== "transfer") {
-      return operationFailure(correlation, "invalid_response");
-    }
-    try {
-      assertSameIdentity(result.identity, account.identity);
-      assertValidIdentity(result.identity);
-    } catch {
-      return operationFailure(correlation, "verification_failed");
-    }
-    completeOperation(correlation);
-    return { txId: result.tx_hash, targetTick: result.target_tick };
+    return completeGlyphTransaction(execution, "transfer", account);
   });
 }
 
@@ -887,19 +882,7 @@ export function requestGlyphScCall(input: GlyphScCallInput) {
     const account = readAccount();
     if (!account) throw new Error("Connect Glyph Wallet before requesting a smart-contract call.");
     const execution = await requestFromGlyph(createGlyphScCallRequestForAccount(input, account));
-    const { result, correlation } = execution;
-    if (result.status === "rejected") return operationFailure(correlation, "wallet_rejected");
-    if (result.status !== "signed" || result.type !== "sc_call") {
-      return operationFailure(correlation, "invalid_response");
-    }
-    try {
-      assertSameIdentity(result.identity, account.identity);
-      assertValidIdentity(result.identity);
-    } catch {
-      return operationFailure(correlation, "verification_failed");
-    }
-    completeOperation(correlation);
-    return { txId: result.tx_hash, targetTick: result.target_tick };
+    return completeGlyphTransaction(execution, "sc_call", account);
   });
 }
 
