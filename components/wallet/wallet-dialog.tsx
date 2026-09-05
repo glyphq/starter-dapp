@@ -3,10 +3,8 @@
 import Image from "next/image";
 import {
   ArrowRightIcon,
-  ArrowUpRightIcon,
   PuzzleIcon,
   QrCodeIcon,
-  WalletIcon,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -43,9 +41,6 @@ export function WalletDialog() {
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogContent className="wallet-dialog">
-        <div className="chooser-symbol" aria-hidden="true">
-          <WalletIcon size={24} />
-        </div>
         <DialogHeader>
           <DialogTitle>Connect a wallet</DialogTitle>
           <DialogDescription>
@@ -106,12 +101,6 @@ export function WalletDialog() {
           {visibleConnectors.length === 0 && (
             <p className="notice">No wallets available.</p>
           )}
-        </div>
-        <div className="wallet-discovery">
-          <span>New to Qubic?</span>
-          <a href="https://docs.glyphq.org" target="_blank" rel="noreferrer">
-            Explore wallets <ArrowUpRightIcon size={15} aria-hidden="true" />
-          </a>
         </div>
         <p className="chooser-safety">
           Your keys stay in your wallet. You approve every request.
