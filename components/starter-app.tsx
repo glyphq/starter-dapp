@@ -3,11 +3,11 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
-  LandmarkIcon,
+  LockKeyholeIcon,
   PenLineIcon,
   MoonIcon,
+  SendIcon,
   SunIcon,
-  VoteIcon,
   WalletIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,14 +21,15 @@ import { useTheme } from "@/hooks/use-theme";
 import { useWalletSession } from "@/components/wallet/wallet-session-provider";
 import { AccountDialog } from "@/components/wallet/account-dialog";
 import { WalletDialog } from "@/components/wallet/wallet-dialog";
-import { ContractExamplesScreen } from "@/components/contract-call/contract-examples-screen";
+import { LockQusScreen } from "@/components/qearn/lock-qus-screen";
+import { SendToManyScreen } from "@/components/qutil/send-to-many-screen";
 import { SignaturesScreen } from "@/components/signatures/signatures-screen";
 import Plasma from "@/components/plasma";
 
 export const referenceFlows = [
   { id: "sign-verify", label: "Sign & Verify" },
-  { id: "qearn", label: "QEarn" },
-  { id: "q-util", label: "QUtil" },
+  { id: "lock-qus", label: "Lock QUs" },
+  { id: "send-to-many", label: "Send to many" },
 ] as const;
 type Flow = (typeof referenceFlows)[number]["id"];
 
@@ -144,7 +145,7 @@ export function StarterApp() {
           </div>
           <div className="starter-hero-copy">
             <h1 id="starter-hero-title">Build with Qubic.</h1>
-            <p>Connect a wallet, sign a message, or explore QEarn and QUtil.</p>
+            <p>Connect a wallet, sign a message, lock QUs, or send to many.</p>
             <div className="starter-hero-actions" aria-label="Starter examples">
               <Button
                 onClick={() => openTask("sign-verify")}
@@ -154,17 +155,17 @@ export function StarterApp() {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => openTask("qearn")}
+                onClick={() => openTask("lock-qus")}
                 disabled={Boolean(pendingAction)}
               >
-                <LandmarkIcon aria-hidden="true" /> QEarn
+                <LockKeyholeIcon aria-hidden="true" /> Lock QUs
               </Button>
               <Button
                 variant="outline"
-                onClick={() => openTask("q-util")}
+                onClick={() => openTask("send-to-many")}
                 disabled={Boolean(pendingAction)}
               >
-                <VoteIcon aria-hidden="true" /> QUtil
+                <SendIcon aria-hidden="true" /> Send to many
               </Button>
             </div>
           </div>
@@ -175,18 +176,14 @@ export function StarterApp() {
               <DialogTitle>
                 {task === "sign-verify"
                   ? "Sign and verify"
-                  : task === "qearn"
-                    ? "QEarn"
-                    : "QUtil"}
+                  : task === "lock-qus"
+                    ? "Lock QUs"
+                    : "Send to many"}
               </DialogTitle>
             </DialogHeader>
             {task === "sign-verify" && <SignaturesScreen />}
-            {task === "qearn" && (
-              <ContractExamplesScreen initialContract="qearn" />
-            )}
-            {task === "q-util" && (
-              <ContractExamplesScreen initialContract="q-util" />
-            )}
+            {task === "lock-qus" && <LockQusScreen />}
+            {task === "send-to-many" && <SendToManyScreen />}
           </DialogContent>
         </Dialog>
       </main>

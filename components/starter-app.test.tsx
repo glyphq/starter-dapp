@@ -3,11 +3,11 @@ import { referenceFlows } from "./starter-app";
 import { isGlyphLaunchAbort } from "@/lib/connectors/glyph-launch";
 
 describe("Qubic reference workspace", () => {
-  test("defines focused QEarn and QUtil actions with account management outside the task surface", () => {
+  test("defines direct lock and send actions with account management outside the task surface", () => {
     expect(referenceFlows.map((flow) => flow.label)).toEqual([
       "Sign & Verify",
-      "QEarn",
-      "QUtil",
+      "Lock QUs",
+      "Send to many",
     ]);
     expect(referenceFlows).toHaveLength(3);
   });
