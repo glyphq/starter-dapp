@@ -45,7 +45,7 @@ export function StarterApp() {
           type="button"
           onClick={() => navigate("connect")}
           disabled={Boolean(pendingAction)}
-          aria-label="Qubic wallet flows home"
+          aria-label="Glyph Starter home"
         >
           <Image
             className="glyph-mark"
@@ -55,8 +55,8 @@ export function StarterApp() {
             height={28}
           />
           <span>
-            <strong>Qubic</strong>
-            <span className="brand-caption"> / playground</span>
+            <strong>Glyph Starter</strong>
+
           </span>
         </button>
         <div className="workspace-header-actions">
@@ -79,9 +79,9 @@ export function StarterApp() {
         </div>
       </header>
       <main className="workspace-main" id="main-content" tabIndex={-1}>
-        <h1 className="sr-only">Qubic wallet playground</h1>
+        <h1 className="sr-only">Glyph Starter</h1>
         <nav className="flow-nav" aria-label="Reference flows">
-          {referenceFlows.map((item, index) => (
+          {referenceFlows.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -90,7 +90,6 @@ export function StarterApp() {
               disabled={Boolean(pendingAction)}
               aria-current={flow === item.id ? "page" : undefined}
             >
-              <span className="nav-index">0{index + 1}</span>
               <span>{item.label}</span>
             </button>
           ))}
