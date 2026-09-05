@@ -55,7 +55,8 @@ export function StarterApp() {
             height={28}
           />
           <span>
-            Qubic <strong>Wallet flows</strong>
+            <strong>Qubic</strong>
+            <span className="brand-caption"> / playground</span>
           </span>
         </button>
         <div className="workspace-header-actions">
@@ -78,14 +79,7 @@ export function StarterApp() {
         </div>
       </header>
       <main className="workspace-main" id="main-content" tabIndex={-1}>
-        <div className="workspace-intro">
-          <span className="eyebrow">Qubic developer reference</span>
-          <h1>Wallet playground.</h1>
-          <p>
-            Connect your wallet. Try a signature. Explore a contract. Your keys
-            stay with you.
-          </p>
-        </div>
+        <h1 className="sr-only">Qubic wallet playground</h1>
         <nav className="flow-nav" aria-label="Reference flows">
           {referenceFlows.map((item, index) => (
             <button
@@ -103,16 +97,18 @@ export function StarterApp() {
         </nav>
         <div className="flow-stage" key={sessionKey}>
           <RequestStatus />
-          {flow === "connect" && <ConnectScreen onNavigate={navigate} />}
+          {flow === "connect" && <ConnectScreen />}
           {flow === "random-lottery" && (
             <RandomLotteryScreen purchaseState={purchaseState} />
           )}
           {flow === "sign-verify" && <SignaturesScreen />}
         </div>
         <footer className="workspace-footer">
-          <span>Independent software for Qubic.</span>
+          <span className="footer-signature">
+            <span className="footer-mark" aria-hidden="true" /> Built on Qubic
+          </span>
           <a href="https://docs.glyphq.org" target="_blank" rel="noreferrer">
-            Integration docs ↗
+            Docs ↗
           </a>
         </footer>
       </main>

@@ -50,3 +50,12 @@ wallet name, mainnet, live QU balance and its tick, refresh, copy, and disconnec
 Balance queries run only while open and retain bigint precision. Failed loads
 show unavailable, never a fabricated zero. The identicon uses the same
 boring-avatars marble variant and palette as Glyph wallet, seeded by identity.
+
+## Minimal shell
+
+The shell omits the marketing hero, duplicate example links and repeated account
+summary. Account management stays in the header modal. The connection screen is
+one prompt and action. Header/footer accents use static CSS dot patterns with
+gradient masks, no effects dependency or animation. Decorations do not intercept
+pointer input and are hidden in forced-color mode. Contract approval and price
+review warnings remain intact.
