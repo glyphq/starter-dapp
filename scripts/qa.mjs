@@ -27,6 +27,12 @@ for (const viewport of [
   if (overflow || serious.length || errors.length) failures.push({ viewport: viewport.name, overflow, serious, errors });
 
   await page.getByRole("button", { name: "Connect wallet" }).click();
+  await page.getByRole("dialog").evaluate(async (element) => {
+    const animations = element.getAnimations({ subtree: true });
+    await Promise.all(animations
+      .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+      .map((animation) => animation.finished.catch(() => {})));
+  });
   const dialogResults = await new AxeBuilder({ page }).analyze();
   const dialogSerious = dialogResults.violations.filter((violation) =>
     ["serious", "critical"].includes(violation.impact ?? ""),
@@ -66,6 +72,7 @@ for (const viewport of [
   await page.getByRole("button", { name: "Sign & Verify" }).click();
   await page.getByRole("heading", { name: "Sign & Verify" }).waitFor();
   await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/sign-verify.png`, fullPage: true });
+  if (errors.length) failures.push({ viewport: `${viewport.name}-runtime`, errors });
   await context.close();
 }
 
