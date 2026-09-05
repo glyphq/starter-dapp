@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { MoonIcon, SunIcon } from "lucide-react";
+import { MoonIcon, SunIcon, WalletIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLotteryPurchase } from "@/hooks/use-lottery-purchase";
 import { useTheme } from "@/hooks/use-theme";
@@ -59,10 +59,6 @@ export function StarterApp() {
           </span>
         </button>
         <div className="workspace-header-actions">
-          <span className="network-label">
-            <span className="status-dot" aria-hidden="true" />
-            Mainnet
-          </span>
           <Button
             variant="ghost"
             size="icon"
@@ -75,6 +71,7 @@ export function StarterApp() {
             <AccountDialog key={sessionKey} />
           ) : (
             <Button variant="outline" onClick={openWalletDialog}>
+              <WalletIcon aria-hidden="true" />
               Connect wallet
             </Button>
           )}
