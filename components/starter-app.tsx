@@ -181,8 +181,8 @@ export function StarterApp() {
               </DialogTitle>
             </DialogHeader>
             {task === "sign-verify" && <SignaturesScreen />}
-            {task === "lock-qus" && <LockQusScreen />}
-            {task === "send-qu" && <SendQusScreen />}
+            {task === "lock-qus" && <LockQusScreen key={sessionKey} />}
+            {task === "send-qu" && <SendQusScreen key={sessionKey} />}
           </DialogContent>
         </Dialog>
       </main>

@@ -31,7 +31,14 @@ try {
     let attempts = 0;
     let account = null;
     const contractRequests = [];
+    const listeners = new Map();
     window.__qaContractRequests = contractRequests;
+    window.__qaSetAccount = (identity) => {
+      account = { identity, name: "QA public identity fixture" };
+      for (const callback of listeners.get("accountChanged") ?? []) {
+        callback(account);
+      }
+    };
     window.qubic = {
       isQubic: true,
       async connect() {
@@ -63,8 +70,11 @@ try {
           broadcast: {},
         };
       },
-      on() {
-        return () => {};
+      on(event, callback) {
+        const callbacks = listeners.get(event) ?? new Set();
+        callbacks.add(callback);
+        listeners.set(event, callbacks);
+        return () => callbacks.delete(callback);
       },
     };
   }, identity);
@@ -145,6 +155,18 @@ try {
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Lock QUs", exact: true }).click();
   const lockDialog = page.locator(".task-dialog");
+  await lockDialog.locator("#lock-qus-amount").fill("1000000");
+  await page.evaluate(
+    (nextIdentity) => window.__qaSetAccount(nextIdentity),
+    "FXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAYKSC",
+  );
+  await page.waitForFunction(
+    () => document.querySelector("#lock-qus-amount")?.value === "",
+  );
+  await page.evaluate(
+    (nextIdentity) => window.__qaSetAccount(nextIdentity),
+    identity,
+  );
   await lockDialog.locator("#lock-qus-amount").fill("1000000");
   await lockDialog
     .getByRole("button", { name: "Lock QUs", exact: true })
@@ -311,6 +333,7 @@ try {
       connectShowsSigningForm: true,
       validationFeedbackMarksTheAffectedField: true,
       pendingTaskCannotBeDismissed: true,
+      accountChangeClearsStateChangingDrafts: true,
       disabledInputsHaveAnExplicitVisualState: true,
       extensionRequestsIncludeActiveSender: true,
       lockAndDirectTransferRequestsUseReviewedInputs: true,
