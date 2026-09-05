@@ -13,6 +13,8 @@ Observed on 2026-09-05. This records the scoped cleanup, not a wallet security a
 | Resolve and validate request origins | `glyph-origin.test.ts` calls the published SDK validator | Blank/missing overrides use the supplied browser origin. Matching overrides canonicalize. Mismatched, credential-bearing, path/query/fragment-bearing, HTTP and private-address origins reject. These are unit checks, not proof of a deployed native-wallet round trip. |
 | Support blank and configured static metadata | Run production builds with `NEXT_PUBLIC_APP_ORIGIN=''` and `NEXT_PUBLIC_APP_ORIGIN=https://dapp.example`, then parse `out/index.html` | Blank configuration builds and omits `og:url`; configured output contains `https://dapp.example/`, as canonicalized by Next.js. No demo fallback is emitted for the blank build. An initial no-trailing-slash assertion was corrected to match the actual canonical output. |
 | Simplify preparation without losing error handling | Run the new fresh-preparation rejection test against the original and fixed connector | Original implementation: one failing test due to an unhandled rejection. Fixed implementation: failure is handled, readiness stays false, and the next deliberate retry succeeds. This regression uses a mocked transport. |
+| Exercise preparation through the starter's public interfaces | Import `prewarmGlyphRelaySession`, `prepareFreshGlyphRelaySession`, and `isGlyphRelaySessionReady` from the actual starter with Bun, using the real official relay | Two concurrent warmup calls return the same promise. Both finish successfully with readiness true. Fresh preparation also finishes with readiness true. No adapter replacement, fetch interception, or response fixture was used. |
+| Exercise the published SDK-to-relay boundary | Call Connect 4.1.0 `prepareRelaySession`, read the actual prepared result URL, then call `subscribeViaRelayV2` with an AbortController and signed-result enforcement | Real registration succeeds (`registered: true`), the authenticated result read returns HTTP 404 while pending, and cancellation returns the typed `aborted` error. No wallet launched and no callback was submitted. |
 | Preserve transaction result validation | Parameterized transfer and smart-contract tests in `glyph-action-readiness.test.ts` | Both reject wallet rejection, incorrect status, incorrect request type, and a different account identity. Existing success and readiness cases pass. Transport is mocked. |
 | Preserve signed callback, cancellation, timeout/retry and duplicate-launch behavior | Existing `glyph.test.ts`, cancellation, retry, launch, lifecycle and idempotency tests | All pass. Cryptographic callback tests exercise the published SDK with generated signed fixtures; transport lifecycle tests use mocks. Neither is a substitute for native-wallet acceptance. |
 | Preserve approval gates | Navigate the real production contract and signing screens without a connected wallet | Both viewports show the contract price field but disable Buy ticket. Sign & Verify shows Wallet required and exposes no Sign message or Verify signature action. No payment or signing request is submitted. |
@@ -27,6 +29,13 @@ The starter has 55 fewer generated UI files and 10 fewer direct dependencies whi
 The final automated suite has 63 passing tests. The count is supporting information; the rows above identify the behavior each check covers. `scripts/qa.mjs` now prints the observed screen-level results, not only an empty failures array.
 
 ## Remaining acceptance boundary
+
+The real relay checks above ran on 2026-09-05 using short-lived sessions. They
+logged only readiness, HTTP status, and safe error codes. Capabilities and full
+session URLs were neither printed nor saved. The relay's documented ten-minute
+expiration cleans up the unused sessions. These checks cover live registration,
+pending-result access, cancellation, and the starter's preparation integration,
+but not callback delivery or wallet approval.
 
 A complete browser → public HTTPS origin → relay → native wallet → signed callback round trip was **not verified**. The local production page was exercised and correctly stops at its HTTPS gate. This session has no configured HTTPS deployment of the modified build or approved test-wallet session. The OS does have a `glyph.desktop` registration pointing to a downloaded AppImage; lack of a binary on PATH is not evidence that Glyph is absent.
 
