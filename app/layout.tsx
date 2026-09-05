@@ -7,10 +7,10 @@ import "@fontsource/geist-mono/400.css";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 
-const appOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN ?? "https://starter.glyphq.org";
+const appOrigin = process.env.NEXT_PUBLIC_APP_ORIGIN?.trim();
 
 export const metadata: Metadata = {
-  metadataBase: new URL(appOrigin),
+  metadataBase: appOrigin ? new URL(appOrigin) : undefined,
   title: {
     default: "Qubic Wallet Flows",
     template: "%s | Qubic Wallet Flows",
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Qubic Wallet Flows",
     description: "A concise reference workspace for Qubic wallet and smart-contract flows.",
-    url: "/",
+    url: appOrigin || undefined,
     siteName: "Qubic Wallet Flows",
     type: "website",
   },
