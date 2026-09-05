@@ -303,3 +303,20 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .account-dialog .account-profile { flex-direction: column; gap: 12px; text-align: center; padding-block: 8px; }
 .account-dialog .account-balance { align-items: center; text-align: center; border: 0; padding-block: 4px 16px; }
 .account-dialog .form-actions { display: grid; grid-template-columns: 1fr 1fr; }
+
+/* Tactile controls: static depth, quick press feedback, no theme-color tween. */
+[data-slot="button"] { transition-property: transform, scale, translate; transition-duration: 100ms; transition-timing-function: cubic-bezier(.2, 0, 0, 1); }
+[data-slot="button"]:is([data-variant="default"], [data-variant="outline"], [data-variant="secondary"]) { box-shadow: inset 0 1px 0 rgb(255 255 255 / .14), 0 3px 0 var(--border-strong), 0 5px 8px rgb(0 0 0 / .09); }
+[data-slot="button"]:not(:disabled):not([aria-disabled="true"]):not([data-static]):not([data-variant="link"]):active { box-shadow: inset 0 1px 3px rgb(0 0 0 / .14), 0 1px 0 var(--border-strong); }
+[data-slot="button"]:is(:disabled, [aria-disabled="true"]) { box-shadow: none; }
+.connector-dialog .wallet-option { transition: scale 100ms cubic-bezier(.2, 0, 0, 1); }
+.connector-dialog .wallet-option:not(:disabled):active { box-shadow: inset 0 1px 3px rgb(0 0 0 / .14); }
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="button"], .connector-dialog .wallet-option { transition: none; }
+  [data-slot="button"]:active, .connector-dialog .wallet-option:active { scale: none !important; translate: none !important; transform: none !important; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot="button"]:not(:disabled):not([aria-disabled="true"]):not([data-static]):not([data-variant="link"]):active { scale: .96; translate: 0 2px; }
+  .connector-dialog .wallet-option:not(:disabled):active { scale: .96; }
+}

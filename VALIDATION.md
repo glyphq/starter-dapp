@@ -121,3 +121,20 @@ connection it observes zero session-feedback banners. Account copy, exact balanc
 mobile accessibility, focus restoration and disconnect still pass. Routine notices
 are hidden; pending actions outside the chooser and actionable errors remain as
 flat inline feedback. These tests do not perform a real native-wallet approval.
+
+## UI Skills: tactile controls
+
+Ran `ui-skills start`, inspected interaction skills, and loaded
+`jakubkrehel/better-ui`. npm's sharp installation failed; running with
+`npm_config_ignore_scripts=true` allowed the CLI to run without modifying app
+dependencies. Applied raised surface depth, 0.96 press scaling, a static opt-out,
+and transitions limited to transform properties rather than all styles.
+
+`node scripts/qa-button-feel.mjs` exercises the actual production UI with real
+pointer and keyboard input. Both motion preferences pass: raised resting shadow,
+pressed shadow, 0.96 scale only with no-preference, no displacement for reduced
+motion, keyboard focus and Enter activation, disabled controls without elevation.
+The first reduced-motion check caught production CSS optimization removing reset
+properties; motion is now enabled only inside the no-preference media query.
+74 unit tests, typecheck, lint, production build, four viewport/theme QA and wallet
+fixture checks pass. No new real native-wallet approval was performed.
