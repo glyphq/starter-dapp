@@ -9,11 +9,6 @@ export type PreparedProcedure = {
   amount: string;
 };
 
-export type SendToManyRecipient = {
-  destination: string;
-  amount: string;
-};
-
 function parseWholeNumber(value: string, label: string, minimum = BigInt(0)) {
   const normalized = value.trim();
   if (!/^\d+$/.test(normalized)) {
@@ -71,37 +66,29 @@ export function prepareLockQus(amount: string): PreparedProcedure {
   };
 }
 
-/**
- * Builds QUtil's generated SendToMany V1 calls. The ABI encodes one destination
- * and amount per request, so a multi-recipient form creates a reviewed queue
- * that requires an explicit wallet approval for every recipient.
- */
-export function prepareSendToMany(
-  recipients: readonly SendToManyRecipient[],
-): PreparedProcedure[] {
-  if (!recipients.length) throw new Error("Add at least one recipient.");
+export type PreparedTransfer = {
+  label: string;
+  destination: string;
+  amount: string;
+};
 
-  return recipients.map(({ destination, amount }, index) => {
-    const recipient = recipientIdentity(destination);
-    const value = toSafeInteger(
-      amount,
-      `Amount for recipient ${index + 1}`,
-      BigInt("9223372036854775807"),
-      BigInt(1),
-    );
-    const call = contracts.qUtil.buildSendToManyV1Input(
-      { dst0: recipient, amt0: value },
-      (identity) => identityToPublicKey(identity as Identity),
-    );
+/** Builds a direct positive whole-QU transfer for the active wallet. */
+export function prepareSendQus(
+  destination: string,
+  amount: string,
+): PreparedTransfer {
+  const value = toSafeInteger(
+    amount,
+    "Amount",
+    BigInt("18446744073709551615"),
+    BigInt(1),
+  );
 
-    return {
-      label: `QUtil SendToMany V1 for recipient ${index + 1}`,
-      contractIndex: call.contractIndex,
-      inputType: call.inputType,
-      payload: call.payload,
-      amount: "0",
-    };
-  });
+  return {
+    label: "Send QUs",
+    destination: recipientIdentity(destination),
+    amount: value.toString(),
+  };
 }
 
 export function payloadToBase64(payload: Uint8Array) {

@@ -22,14 +22,14 @@ import { useWalletSession } from "@/components/wallet/wallet-session-provider";
 import { AccountDialog } from "@/components/wallet/account-dialog";
 import { WalletDialog } from "@/components/wallet/wallet-dialog";
 import { LockQusScreen } from "@/components/qearn/lock-qus-screen";
-import { SendToManyScreen } from "@/components/qutil/send-to-many-screen";
+import { SendQusScreen } from "@/components/transfers/send-qu-screen";
 import { SignaturesScreen } from "@/components/signatures/signatures-screen";
 import Plasma from "@/components/plasma";
 
 export const referenceFlows = [
   { id: "sign-verify", label: "Sign & Verify" },
   { id: "lock-qus", label: "Lock QUs" },
-  { id: "send-to-many", label: "Send to many" },
+  { id: "send-qu", label: "Send QUs" },
 ] as const;
 type Flow = (typeof referenceFlows)[number]["id"];
 
@@ -145,7 +145,7 @@ export function StarterApp() {
           </div>
           <div className="starter-hero-copy">
             <h1 id="starter-hero-title">Build with Qubic.</h1>
-            <p>Connect a wallet, sign a message, lock QUs, or send to many.</p>
+            <p>Connect a wallet, sign a message, lock QUs, or send QUs.</p>
             <div className="starter-hero-actions" aria-label="Starter examples">
               <Button
                 onClick={() => openTask("sign-verify")}
@@ -162,10 +162,10 @@ export function StarterApp() {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => openTask("send-to-many")}
+                onClick={() => openTask("send-qu")}
                 disabled={Boolean(pendingAction)}
               >
-                <SendIcon aria-hidden="true" /> Send to many
+                <SendIcon aria-hidden="true" /> Send QUs
               </Button>
             </div>
           </div>
@@ -178,12 +178,12 @@ export function StarterApp() {
                   ? "Sign and verify"
                   : task === "lock-qus"
                     ? "Lock QUs"
-                    : "Send to many"}
+                    : "Send QUs"}
               </DialogTitle>
             </DialogHeader>
             {task === "sign-verify" && <SignaturesScreen />}
             {task === "lock-qus" && <LockQusScreen />}
-            {task === "send-to-many" && <SendToManyScreen />}
+            {task === "send-qu" && <SendQusScreen />}
           </DialogContent>
         </Dialog>
       </main>

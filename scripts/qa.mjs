@@ -141,7 +141,7 @@ for (const viewport of [
   if (!dialogClosed || !focusRestored)
     failures.push({ viewport: viewport.name, dialogClosed, focusRestored });
   const taskButtons = await page
-    .getByRole("button", { name: /^(Sign & Verify|Lock QUs|Send to many)$/ })
+    .getByRole("button", { name: /^(Sign & Verify|Lock QUs|Send QUs)$/ })
     .count();
   const heroFullBleed = await page
     .locator(".starter-hero")
@@ -229,50 +229,50 @@ for (const viewport of [
       lockFocusRestored,
     });
 
-  await page.getByRole("button", { name: "Send to many", exact: true }).click();
-  const sendScreen = page.locator(".task-dialog .procedure-screen");
-  await sendScreen
-    .getByRole("heading", { name: "Send to many", exact: true })
+  await page.getByRole("button", { name: "Send QUs", exact: true }).click();
+  const transferScreen = page.locator(".task-dialog .procedure-screen");
+  await transferScreen
+    .getByRole("heading", { name: "Send QUs", exact: true })
     .waitFor();
-  const sendDialogBox = await page.locator(".task-dialog").boundingBox();
-  const sendConnect = await sendScreen
+  const transferDialogBox = await page.locator(".task-dialog").boundingBox();
+  const transferConnect = await transferScreen
     .getByRole("button", { name: "Connect wallet", exact: true })
     .count();
-  const sendInputs = await sendScreen.locator("input").count();
-  const sendSelectors = await sendScreen.locator("select").count();
-  const sendResults = await new AxeBuilder({ page })
+  const transferInputs = await transferScreen.locator("input").count();
+  const transferSelectors = await transferScreen.locator("select").count();
+  const transferResults = await new AxeBuilder({ page })
     .include(".task-dialog")
     .analyze();
-  const sendSerious = sendResults.violations.filter((violation) =>
+  const transferSerious = transferResults.violations.filter((violation) =>
     ["serious", "critical"].includes(violation.impact ?? ""),
   );
   await page.screenshot({
-    path: `artifacts/screenshots/${viewport.name}/send-to-many.png`,
+    path: `artifacts/screenshots/${viewport.name}/send-qu.png`,
     fullPage: true,
   });
   observations.push({
     viewport: viewport.name,
-    screen: "Send to many",
-    connectActions: sendConnect,
-    formInputs: sendInputs,
-    selectors: sendSelectors,
-    modalWidth: sendDialogBox?.width ?? 0,
-    seriousAccessibilityIssues: sendSerious.length,
+    screen: "Send QUs",
+    connectActions: transferConnect,
+    formInputs: transferInputs,
+    selectors: transferSelectors,
+    modalWidth: transferDialogBox?.width ?? 0,
+    seriousAccessibilityIssues: transferSerious.length,
   });
   if (
-    sendConnect !== 1 ||
-    sendInputs !== 0 ||
-    sendSelectors !== 0 ||
-    (sendDialogBox && sendDialogBox.width > 480) ||
-    sendSerious.length
+    transferConnect !== 1 ||
+    transferInputs !== 0 ||
+    transferSelectors !== 0 ||
+    (transferDialogBox && transferDialogBox.width > 480) ||
+    transferSerious.length
   ) {
     failures.push({
-      viewport: `${viewport.name}-send-to-many`,
-      sendConnect,
-      sendInputs,
-      sendSelectors,
-      modalWidth: sendDialogBox?.width ?? 0,
-      serious: sendSerious,
+      viewport: `${viewport.name}-send-qu`,
+      transferConnect,
+      transferInputs,
+      transferSelectors,
+      modalWidth: transferDialogBox?.width ?? 0,
+      serious: transferSerious,
     });
   }
   await page.keyboard.press("Escape");

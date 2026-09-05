@@ -1230,29 +1230,6 @@ select {
   font-size: 12px;
   user-select: all;
 }
-.recipient-list {
-  display: grid;
-  gap: 20px;
-}
-.recipient-entry {
-  position: relative;
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-}
-.recipient-entry legend {
-  margin-bottom: 6px;
-  color: var(--text-soft);
-  font-size: 12px;
-  font-weight: 600;
-}
-.recipient-remove {
-  position: absolute;
-  top: -2px;
-  right: 0;
-}
 /* Use open space and tonal hierarchy rather than incidental dividing rules. */
 .price-summary,
 .output-block,

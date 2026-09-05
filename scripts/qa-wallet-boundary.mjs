@@ -150,57 +150,42 @@ try {
   );
   await page.getByText("Lock request approved.", { exact: true }).waitFor();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Send to many", exact: true }).click();
-  const sendDialog = page.locator(".task-dialog");
-  await sendDialog
-    .locator("#send-to-many-recipient-0")
+  await page.getByRole("button", { name: "Send QUs", exact: true }).click();
+  const transferDialog = page.locator(".task-dialog");
+  await transferDialog
+    .locator("#send-qu-recipient")
     .fill("FXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAYKSC");
-  await sendDialog.locator("#send-to-many-amount-0").fill("1000000");
-  await sendDialog
-    .getByRole("button", { name: "Add recipient", exact: true })
-    .click();
-  await sendDialog
-    .locator("#send-to-many-recipient-1")
-    .fill("CTMNSGWXGORBGACTMNSGWXGORBGACTMNSGWXGORBGACTMNSGWXGORBGATLWA");
-  await sendDialog.locator("#send-to-many-amount-1").fill("42");
+  await transferDialog.locator("#send-qu-amount").fill("42");
   await page.setViewportSize({ width: 390, height: 844 });
-  const sendAccessibility = await new AxeBuilder({ page })
+  const transferAccessibility = await new AxeBuilder({ page })
     .include(".task-dialog")
     .analyze();
   assert.equal(
-    sendAccessibility.violations.filter((item) =>
+    transferAccessibility.violations.filter((item) =>
       ["serious", "critical"].includes(item.impact),
     ).length,
     0,
   );
   assert.equal(
-    await sendDialog.evaluate(
+    await transferDialog.evaluate(
       (element) => element.scrollWidth > element.clientWidth,
     ),
     false,
   );
   await page.screenshot({
-    path: "artifacts/screenshots/send-to-many-connected-mobile.png",
+    path: "artifacts/screenshots/send-qu-connected-mobile.png",
     fullPage: true,
   });
-  await sendDialog
-    .getByRole("button", { name: "Approve QUtil call 1 of 2", exact: true })
+  await transferDialog
+    .getByRole("button", { name: "Send QUs", exact: true })
     .click();
   assert.equal(
-    await sendDialog
-      .getByText("QUtil procedure 1 of 2 approved.", { exact: true })
+    await transferDialog
+      .getByText("Transfer request approved.", { exact: true })
       .count(),
     0,
   );
-  await page
-    .getByText("QUtil procedure 1 of 2 approved.", { exact: true })
-    .waitFor();
-  await sendDialog
-    .getByRole("button", { name: "Approve QUtil call 2 of 2", exact: true })
-    .click();
-  await page
-    .getByText("QUtil procedure 2 of 2 approved.", { exact: true })
-    .waitFor();
+  await page.getByText("Transfer request approved.", { exact: true }).waitFor();
   const contractRequests = await page.evaluate(
     () => window.__qaContractRequests,
   );
@@ -212,18 +197,9 @@ try {
       inputType: 1,
     },
     {
-      amount: "0",
+      amount: "42",
       destination:
-        "EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVWRF",
-      inputType: 1,
-      payload: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwdAQg8AAAAAAA==",
-    },
-    {
-      amount: "0",
-      destination:
-        "EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVWRF",
-      inputType: 1,
-      payload: "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgqAAAAAAAAAA==",
+        "FXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAYKSC",
     },
   ]);
 
@@ -314,7 +290,7 @@ try {
       rejectionKeepsChooserOpen: true,
       retryConnects: true,
       connectShowsSigningForm: true,
-      lockAndMultiSendProcedureRequestsUsePackageTypedInputs: true,
+      lockAndDirectTransferRequestsUseReviewedInputs: true,
       disconnectClearsSession: true,
       accountModalCompactBalanceAndIdentityActions: true,
       escapeRestoresFocus: true,

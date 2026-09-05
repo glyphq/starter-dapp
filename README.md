@@ -16,30 +16,28 @@ three focused actions:
 
 - **Sign & Verify** signs a message or checks a signature for the active identity.
 - **Lock QUs** prepares QEarn's generated `Lock` procedure.
-- **Send to many** prepares QUtil's generated `SendToMany V1` procedure.
+- **Send QUs** prepares one direct whole-QU wallet transfer.
 
-The contract actions are deliberately curated. There is no generic contract
-form, raw contract index, input type, or binary payload field. Each action
-builds one reviewed request with `@qubic.org/contracts` and leaves approval to
-the wallet.
+The action surface is deliberately curated. There is no generic contract form,
+raw contract index, input type, or binary payload field. QEarn uses its reviewed
+`@qubic.org/contracts` builder, while Send QUs uses the wallet's direct transfer
+capability. Every request still requires wallet approval.
 
 ## Wallet behavior
 
-| Connector               | Behavior                                                                                                                                        |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Qubic browser extension | Uses the injected provider from `@qubic.org/react`. It is disabled when not installed.                                                          |
-| WalletConnect           | Uses QR pairing, requires `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, and sends `qubic_sign` input as `{ message }` for Qubic Wallet compatibility. |
-| Glyph Wallet            | Uses a Relay v2 desktop deep link and requires a public HTTPS deployment.                                                                       |
+| Connector               | Behavior                                                                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Qubic browser extension | Uses the injected provider from `@qubic.org/react`. It is disabled when not installed.                                                                |
+| WalletConnect           | Uses QR pairing, requires `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, and sends `qubic_sign` input as `{ from, message }` for Qubic Wallet compatibility. |
+| Glyph Wallet            | Uses a Relay v2 desktop deep link and requires a public HTTPS deployment.                                                                             |
 
 A disconnected action presents only **Connect wallet**. Inputs and its submit
 control appear only once an account connects.
 
 - **Lock QUs** attaches the entered positive whole-QU amount to QEarn contract
   9, input type 1.
-- **Send to many** uses QUtil contract 4, input type 1. It turns each entered
-  recipient-and-amount pair into a generated request and attaches zero QU. The
-  installed V1 ABI encodes one pair per request, so each recipient gets a
-  separate explicit wallet approval.
+- **Send QUs** validates one Qubic recipient identity and a positive whole-QU
+  amount before a direct wallet transfer request.
 
 Review every wallet request. A procedure may change on-chain state. This starter
 does not initiate requests automatically.
@@ -83,21 +81,21 @@ Source paths use kebab-case. Component symbols stay PascalCase.
 - `components/signatures/signatures-screen.tsx` owns signing and verification
   inputs and durable signature results.
 - `components/qearn/lock-qus-screen.tsx` owns the direct QEarn Lock form.
-- `components/qutil/send-to-many-screen.tsx` owns the direct QUtil SendToMany
-  recipient queue and explicit approval progression.
+- `components/transfers/send-qu-screen.tsx` owns the direct QU transfer form.
 - `lib/contracts/starter-procedures.ts` is the reviewed typed boundary for
-  QEarn Lock, QUtil SendToMany V1, numeric validation, identity validation, and
-  payload conversion.
+  QEarn Lock, direct-transfer validation, identity validation, and payload
+  conversion.
 - `lib/connectors/glyph.ts` isolates the Glyph Relay v2 adapter and native
   smart-contract request path.
 
 The browser extension and WalletConnect use the shared `sendTransaction` call.
-Glyph intentionally uses `requestGlyphScCall()` because its native callback
-protocol is handled through its signed Relay boundary.
+Glyph uses `requestGlyphScCall()` for QEarn and `requestGlyphTransfer()` for
+direct transfers through its signed Relay boundary.
 
 `lib/connectors/wallet-connect.ts` is a small compatibility adapter around the
 WalletConnect client. It keeps the upstream connector contract while sending a
-map-shaped `qubic_sign` parameter that Qubic Wallet expects.
+map-shaped `qubic_sign` parameter with the connected sender that Qubic Wallet
+expects.
 
 ## Glyph relay behavior
 
@@ -152,8 +150,8 @@ node scripts/qa-wallet-boundary.mjs
 `qa.mjs` checks desktop and mobile layouts, theme persistence, accessibility,
 connector chooser behavior, direct disconnected action gates, and absence of
 runtime errors. `qa-wallet-boundary.mjs` runs the built UI against a synthetic
-extension to check rejection, retry, signing, direct QEarn/QUtil request shapes,
-identity-aware toasts, and account behavior.
+extension to check rejection, retry, signing, direct QEarn and transfer request
+shapes, identity-aware toasts, and account behavior.
 
 Those checks do **not** prove an actual native wallet round trip. A deployed
 HTTPS build and an authorized test wallet are still required to verify a real
@@ -168,7 +166,7 @@ components/
   wallet/                    Connection, account UI, and global toasts
   signatures/                Sign and verify flow
   qearn/                     Direct Lock QUs flow
-  qutil/                     Direct Send to many flow
+  transfers/                 Direct Send QUs flow
 lib/
   contracts/                 Typed, reviewed starter procedures
   connectors/                Connector registry and Glyph Relay adapter
