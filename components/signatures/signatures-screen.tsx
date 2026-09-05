@@ -8,6 +8,7 @@ import {
   PenLineIcon,
   WalletIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWalletSession } from "@/components/wallet/wallet-session-provider";
@@ -29,10 +30,6 @@ export function SignaturesScreen() {
   const [signatureInput, setSignatureInput] = useState("");
   const [resultAccount, setResultAccount] = useState<string | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
-  const [verified, setVerified] = useState<boolean | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const inFlight = useRef(false);
   const busy = working || pendingAction !== null;
@@ -44,18 +41,10 @@ export function SignaturesScreen() {
   if (accountKey !== previousAccountKey) {
     setPreviousAccountKey(accountKey);
     setSignature(null);
-    setVerified(null);
-    setError(null);
-    setNotice(null);
-    setCopyStatus(null);
   }
 
   function clearResults() {
     setSignature(null);
-    setVerified(null);
-    setError(null);
-    setNotice(null);
-    setCopyStatus(null);
   }
 
   function switchMode(nextMode: SignatureMode) {
@@ -73,7 +62,7 @@ export function SignaturesScreen() {
       nextMode === "verify" ? signatureInput : undefined,
     );
     if (validationError) {
-      setError(validationError);
+      toast.error(validationError);
       return;
     }
     const account = wallet.account;
@@ -82,7 +71,6 @@ export function SignaturesScreen() {
       return;
     }
     if (isGlyph && !ensureGlyphReady()) {
-      setNotice("Preparing Glyph. When ready, press the action button again.");
       return;
     }
     inFlight.current = true;
@@ -101,6 +89,7 @@ export function SignaturesScreen() {
         if (result !== undefined) {
           setResultAccount(accountKey);
           setSignature(result.signatureHex);
+          toast.success("Signature ready.");
         }
       } else {
         const result = await runAction(
@@ -119,8 +108,16 @@ export function SignaturesScreen() {
           failureMessage,
         );
         if (result !== undefined) {
-          setResultAccount(accountKey);
-          setVerified(result);
+          if (result) {
+            toast.success("Signature verified.", {
+              description: "It matches this message and connected identity.",
+            });
+          } else {
+            toast.error("Signature did not verify.", {
+              description:
+                "Check the message, signature, and connected identity.",
+            });
+          }
         }
       }
     } finally {
@@ -133,9 +130,9 @@ export function SignaturesScreen() {
     if (!signature) return;
     try {
       await navigator.clipboard.writeText(signature);
-      setCopyStatus("Signature copied.");
+      toast.success("Signature copied.");
     } catch {
-      setCopyStatus("Select the signature to copy it.");
+      toast.message("Select the signature to copy it.");
     }
   }
 
@@ -144,6 +141,26 @@ export function SignaturesScreen() {
     mode === "sign"
       ? "Write a message, then approve it in your wallet."
       : "Check a signature against your connected identity.";
+
+  if (!connected) {
+    return (
+      <section
+        className="flow-panel signatures-screen"
+        aria-labelledby="signatures-heading"
+      >
+        <header className="flow-heading">
+          <h2 id="signatures-heading">Sign &amp; Verify</h2>
+          <p>Connect a wallet to sign messages or verify a signature.</p>
+        </header>
+        <div className="form-actions task-action-stack">
+          <Button type="button" onClick={openWalletDialog} disabled={busy}>
+            <WalletIcon aria-hidden="true" />
+            Connect wallet
+          </Button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section
@@ -203,49 +220,41 @@ export function SignaturesScreen() {
               : "Verification runs locally in your browser."}
         </p>
         <div className="form-actions task-action-stack">
-          {connected ? (
-            <Button type="submit" disabled={busy}>
-              {mode === "sign" ? (
-                <PenLineIcon aria-hidden="true" />
-              ) : (
-                <BadgeCheckIcon aria-hidden="true" />
-              )}
-              {working
-                ? mode === "sign"
-                  ? "Signing…"
-                  : "Verifying…"
-                : mode === "sign"
-                  ? "Sign message"
-                  : "Verify signature"}
+          <Button type="submit" disabled={busy}>
+            {mode === "sign" ? (
+              <PenLineIcon aria-hidden="true" />
+            ) : (
+              <BadgeCheckIcon aria-hidden="true" />
+            )}
+            {working
+              ? mode === "sign"
+                ? "Signing…"
+                : "Verifying…"
+              : mode === "sign"
+                ? "Sign message"
+                : "Verify signature"}
+          </Button>
+          {mode === "sign" ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => switchMode("verify")}
+              disabled={busy}
+            >
+              <BadgeCheckIcon aria-hidden="true" />
+              Verify an existing signature
             </Button>
           ) : (
-            <Button type="button" onClick={openWalletDialog} disabled={busy}>
-              <WalletIcon aria-hidden="true" />
-              Connect wallet
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => switchMode("sign")}
+              disabled={busy}
+            >
+              <PenLineIcon aria-hidden="true" />
+              Sign a message
             </Button>
           )}
-          {connected &&
-            (mode === "sign" ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => switchMode("verify")}
-                disabled={busy}
-              >
-                <BadgeCheckIcon aria-hidden="true" />
-                Verify an existing signature
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => switchMode("sign")}
-                disabled={busy}
-              >
-                <PenLineIcon aria-hidden="true" />
-                Sign a message
-              </Button>
-            ))}
         </div>
       </form>
 
@@ -279,31 +288,6 @@ export function SignaturesScreen() {
             </div>
           </div>
         )}
-
-      {mode === "verify" &&
-        verified !== null &&
-        resultAccount === accountKey && (
-          <p className={verified ? "result-line" : "error-line"} role="status">
-            {verified
-              ? "Signature is valid for this message and connected identity."
-              : "Signature is not valid for this message and connected identity."}
-          </p>
-        )}
-      {copyStatus && (
-        <p className="help-text" role="status">
-          {copyStatus}
-        </p>
-      )}
-      {notice && (
-        <p className="notice" role="status">
-          {notice}
-        </p>
-      )}
-      {error && (
-        <p className="error-line" role="alert">
-          {error}
-        </p>
-      )}
     </section>
   );
 }

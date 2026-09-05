@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useBalance } from "@qubic.org/react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,16 +19,15 @@ import { Identicon } from "./identicon";
 export function AccountDialog() {
   const { wallet, pendingAction, disconnect } = useWalletSession();
   const [open, setOpen] = useState(false);
-  const [copyStatus, setCopyStatus] = useState("Copy identity");
   const identity = wallet.account?.identity;
   const balance = useBalance(open ? identity : null, { retry: 1 });
   if (!identity || !wallet.activeConnector) return null;
   async function copyIdentity() {
     try {
       await navigator.clipboard.writeText(identity!);
-      setCopyStatus("Identity copied");
+      toast.success("Identity copied.");
     } catch {
-      setCopyStatus("Select the identity below to copy.");
+      toast.message("Select the identity below to copy it.");
     }
   }
   return (
@@ -96,11 +96,6 @@ export function AccountDialog() {
             Disconnect
           </Button>
         </div>
-        {copyStatus !== "Copy identity" && (
-          <p className="help-text" role="status">
-            {copyStatus}
-          </p>
-        )}
       </DialogContent>
     </Dialog>
   );

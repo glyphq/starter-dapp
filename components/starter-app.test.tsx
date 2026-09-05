@@ -3,12 +3,13 @@ import { referenceFlows } from "./starter-app";
 import { isGlyphLaunchAbort } from "@/lib/connectors/glyph-launch";
 
 describe("Qubic reference workspace", () => {
-  test("defines two modal starter actions with account management outside the task surface", () => {
+  test("defines focused QEarn and QUtil actions with account management outside the task surface", () => {
     expect(referenceFlows.map((flow) => flow.label)).toEqual([
       "Sign & Verify",
-      "Contract call",
+      "QEarn",
+      "QUtil",
     ]);
-    expect(referenceFlows).toHaveLength(2);
+    expect(referenceFlows).toHaveLength(3);
   });
 
   test("suppresses only Chromium's known custom-protocol launch abort", () => {

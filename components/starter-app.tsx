@@ -3,17 +3,16 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
-  DicesIcon,
+  LandmarkIcon,
   PenLineIcon,
   MoonIcon,
   SunIcon,
+  VoteIcon,
   WalletIcon,
-  XIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -22,14 +21,14 @@ import { useTheme } from "@/hooks/use-theme";
 import { useWalletSession } from "@/components/wallet/wallet-session-provider";
 import { AccountDialog } from "@/components/wallet/account-dialog";
 import { WalletDialog } from "@/components/wallet/wallet-dialog";
-import { RequestStatus } from "@/components/wallet/request-status";
-import { ContractCallScreen } from "@/components/contract-call/contract-call-screen";
+import { ContractExamplesScreen } from "@/components/contract-call/contract-examples-screen";
 import { SignaturesScreen } from "@/components/signatures/signatures-screen";
 import Plasma from "@/components/plasma";
 
 export const referenceFlows = [
   { id: "sign-verify", label: "Sign & Verify" },
-  { id: "contract-call", label: "Contract call" },
+  { id: "qearn", label: "QEarn" },
+  { id: "q-util", label: "QUtil" },
 ] as const;
 type Flow = (typeof referenceFlows)[number]["id"];
 
@@ -145,7 +144,7 @@ export function StarterApp() {
           </div>
           <div className="starter-hero-copy">
             <h1 id="starter-hero-title">Build with Qubic.</h1>
-            <p>Connect a wallet, sign a message, or try a contract call.</p>
+            <p>Connect a wallet, sign a message, or explore QEarn and QUtil.</p>
             <div className="starter-hero-actions" aria-label="Starter examples">
               <Button
                 onClick={() => openTask("sign-verify")}
@@ -155,10 +154,17 @@ export function StarterApp() {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => openTask("contract-call")}
+                onClick={() => openTask("qearn")}
                 disabled={Boolean(pendingAction)}
               >
-                <DicesIcon aria-hidden="true" /> Contract call
+                <LandmarkIcon aria-hidden="true" /> QEarn
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => openTask("q-util")}
+                disabled={Boolean(pendingAction)}
+              >
+                <VoteIcon aria-hidden="true" /> QUtil
               </Button>
             </div>
           </div>
@@ -167,17 +173,20 @@ export function StarterApp() {
           <DialogContent className="task-dialog" aria-describedby={undefined}>
             <DialogHeader className="sr-only">
               <DialogTitle>
-                {task === "sign-verify" ? "Sign and verify" : "Contract call"}
+                {task === "sign-verify"
+                  ? "Sign and verify"
+                  : task === "qearn"
+                    ? "QEarn"
+                    : "QUtil"}
               </DialogTitle>
             </DialogHeader>
-            <RequestStatus />
             {task === "sign-verify" && <SignaturesScreen />}
-            {task === "contract-call" && <ContractCallScreen />}
-            <div className="task-cancel">
-              <DialogClose render={<Button variant="ghost" />}>
-                <XIcon aria-hidden="true" /> Cancel
-              </DialogClose>
-            </div>
+            {task === "qearn" && (
+              <ContractExamplesScreen initialContract="qearn" />
+            )}
+            {task === "q-util" && (
+              <ContractExamplesScreen initialContract="q-util" />
+            )}
           </DialogContent>
         </Dialog>
       </main>
