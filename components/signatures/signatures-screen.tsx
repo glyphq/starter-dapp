@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Identicon } from "@/components/wallet/identicon";
 import { useWalletSession } from "@/components/wallet/wallet-session-provider";
 import { requestGlyphVerification } from "@/lib/connectors/glyph";
 import { signatureBytes, validateSignatureInputs } from "@/lib/signatures";
@@ -89,7 +90,9 @@ export function SignaturesScreen() {
         if (result !== undefined) {
           setResultAccount(accountKey);
           setSignature(result.signatureHex);
-          toast.success("Signature ready.");
+          toast.success("Signature ready.", {
+            icon: <Identicon identity={account.identity} size={20} />,
+          });
         }
       } else {
         const result = await runAction(
@@ -111,11 +114,13 @@ export function SignaturesScreen() {
           if (result) {
             toast.success("Signature verified.", {
               description: "It matches this message and connected identity.",
+              icon: <Identicon identity={account.identity} size={20} />,
             });
           } else {
             toast.error("Signature did not verify.", {
               description:
                 "Check the message, signature, and connected identity.",
+              icon: <Identicon identity={account.identity} size={20} />,
             });
           }
         }
@@ -130,7 +135,11 @@ export function SignaturesScreen() {
     if (!signature) return;
     try {
       await navigator.clipboard.writeText(signature);
-      toast.success("Signature copied.");
+      toast.success("Signature copied.", {
+        icon: wallet.account ? (
+          <Identicon identity={wallet.account.identity} size={20} />
+        ) : undefined,
+      });
     } catch {
       toast.message("Select the signature to copy it.");
     }

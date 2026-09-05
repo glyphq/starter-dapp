@@ -101,13 +101,19 @@ try {
   await connect.click();
   await walletDialog.waitFor({ state: "detached" });
   assert.equal(await walletDialog.count(), 0);
+  await page.getByText("Wallet connected.", { exact: true }).waitFor();
   await page
-    .getByText(
-      "Wallet connected. Requests still require approval in your wallet.",
-      { exact: true },
-    )
+    .locator("[data-sonner-toast]")
+    .filter({ hasText: "Wallet connected." })
+    .locator(".identity-avatar svg")
     .waitFor();
   assert.equal(await page.locator(".session-feedback").count(), 0);
+  assert.equal(
+    await page
+      .getByText("Your keys remain in your wallet.", { exact: true })
+      .count(),
+    0,
+  );
   const messageDraft = taskDialog.locator(
     ".signatures-screen #signature-message",
   );
@@ -130,47 +136,67 @@ try {
   );
 
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "QEarn", exact: true }).click();
-  const qearnDialog = page.locator(".task-dialog");
-  await qearnDialog
-    .locator("#starter-contract-action-selector")
-    .selectOption("qearn-lock");
-  await qearnDialog.locator("#procedure-amount").fill("1000000");
-  await qearnDialog
-    .getByRole("button", { name: "Lock QU", exact: true })
+  await page.getByRole("button", { name: "Lock QUs", exact: true }).click();
+  const lockDialog = page.locator(".task-dialog");
+  await lockDialog.locator("#lock-qus-amount").fill("1000000");
+  await lockDialog
+    .getByRole("button", { name: "Lock QUs", exact: true })
     .click();
   assert.equal(
-    await qearnDialog
-      .getByText("The wallet approved the contract request.", { exact: true })
+    await lockDialog
+      .getByText("Lock request approved.", { exact: true })
       .count(),
     0,
   );
-  await page
-    .getByText("Contract request approved.", { exact: true })
-    .last()
-    .waitFor();
+  await page.getByText("Lock request approved.", { exact: true }).waitFor();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "QUtil", exact: true }).click();
-  const qutilDialog = page.locator(".task-dialog");
-  await qutilDialog
-    .locator("#starter-contract-action-selector")
-    .selectOption("q-util-vote");
-  await qutilDialog.locator("#procedure-pollId").fill("4");
-  await qutilDialog.locator("#procedure-option").fill("2");
-  await qutilDialog.locator("#procedure-amount").fill("0");
-  await qutilDialog
-    .getByRole("button", { name: "Vote in a poll", exact: true })
+  await page.getByRole("button", { name: "Send to many", exact: true }).click();
+  const sendDialog = page.locator(".task-dialog");
+  await sendDialog
+    .locator("#send-to-many-recipient-0")
+    .fill("FXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAYKSC");
+  await sendDialog.locator("#send-to-many-amount-0").fill("1000000");
+  await sendDialog
+    .getByRole("button", { name: "Add recipient", exact: true })
+    .click();
+  await sendDialog
+    .locator("#send-to-many-recipient-1")
+    .fill("CTMNSGWXGORBGACTMNSGWXGORBGACTMNSGWXGORBGACTMNSGWXGORBGATLWA");
+  await sendDialog.locator("#send-to-many-amount-1").fill("42");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sendAccessibility = await new AxeBuilder({ page })
+    .include(".task-dialog")
+    .analyze();
+  assert.equal(
+    sendAccessibility.violations.filter((item) =>
+      ["serious", "critical"].includes(item.impact),
+    ).length,
+    0,
+  );
+  assert.equal(
+    await sendDialog.evaluate(
+      (element) => element.scrollWidth > element.clientWidth,
+    ),
+    false,
+  );
+  await page.screenshot({
+    path: "artifacts/screenshots/send-to-many-connected-mobile.png",
+    fullPage: true,
+  });
+  await sendDialog
+    .getByRole("button", { name: "Send 1 of 2", exact: true })
     .click();
   assert.equal(
-    await qutilDialog
-      .getByText("The wallet approved the contract request.", { exact: true })
+    await sendDialog
+      .getByText("Recipient 1 of 2 approved.", { exact: true })
       .count(),
     0,
   );
-  await page
-    .getByText("Contract request approved.", { exact: true })
-    .last()
-    .waitFor();
+  await page.getByText("Recipient 1 of 2 approved.", { exact: true }).waitFor();
+  await sendDialog
+    .getByRole("button", { name: "Send 2 of 2", exact: true })
+    .click();
+  await page.getByText("Recipient 2 of 2 approved.", { exact: true }).waitFor();
   const contractRequests = await page.evaluate(
     () => window.__qaContractRequests,
   );
@@ -185,9 +211,15 @@ try {
       amount: "0",
       destination:
         "EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVWRF",
-      inputType: 5,
-      payload:
-        "BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAA=",
+      inputType: 1,
+      payload: "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwdAQg8AAAAAAA==",
+    },
+    {
+      amount: "0",
+      destination:
+        "EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVWRF",
+      inputType: 1,
+      payload: "CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgqAAAAAAAAAA==",
     },
   ]);
 
@@ -216,6 +248,11 @@ try {
     .getByRole("button", { name: "Copy identity", exact: true })
     .click();
   await page.getByText("Identity copied.", { exact: true }).waitFor();
+  await page
+    .locator("[data-sonner-toast]")
+    .filter({ hasText: "Identity copied." })
+    .locator(".identity-avatar svg")
+    .waitFor();
   assert.equal(
     await dialog
       .getByRole("button", { name: "Copy identity", exact: true })
@@ -273,13 +310,15 @@ try {
       rejectionKeepsChooserOpen: true,
       retryConnects: true,
       connectShowsSigningForm: true,
-      qearnAndQUtilProcedureRequestsUsePackageTypedInputs: true,
+      lockAndMultiSendProcedureRequestsUsePackageTypedInputs: true,
       disconnectClearsSession: true,
       accountModalCompactBalanceAndIdentityActions: true,
       escapeRestoresFocus: true,
       spinnerInsideSelectedProvider: true,
       noConnectionSuccessBanner: true,
       transientFeedbackUsesToasts: true,
+      walletToastsHaveIdentityAvatars: true,
+      noRedundantKeyCustodyCopy: true,
     }),
   );
 } finally {

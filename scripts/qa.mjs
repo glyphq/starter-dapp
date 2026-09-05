@@ -141,7 +141,7 @@ for (const viewport of [
   if (!dialogClosed || !focusRestored)
     failures.push({ viewport: viewport.name, dialogClosed, focusRestored });
   const taskButtons = await page
-    .getByRole("button", { name: /^(Sign & Verify|QEarn|QUtil)$/ })
+    .getByRole("button", { name: /^(Sign & Verify|Lock QUs|Send to many)$/ })
     .count();
   const heroFullBleed = await page
     .locator(".starter-hero")
@@ -162,163 +162,119 @@ for (const viewport of [
       taskButtons,
       heroFullBleed,
     });
-  await page.getByRole("button", { name: "QEarn", exact: true }).click();
-  const qearnScreen = page
-    .locator(".task-dialog")
-    .locator(".contract-examples-screen");
-  await qearnScreen
-    .getByRole("heading", { name: "QEarn", exact: true })
+
+  await page.getByRole("button", { name: "Lock QUs", exact: true }).click();
+  const lockScreen = page.locator(".task-dialog .procedure-screen");
+  await lockScreen
+    .getByRole("heading", { name: "Lock QUs", exact: true })
     .waitFor();
-  const qearnContractSelector = qearnScreen.locator(
-    "#starter-contract-selector",
-  );
-  const qearnActionSelector = qearnScreen.locator(
-    "#starter-contract-action-selector",
-  );
-  const contractOptions = await qearnContractSelector.evaluate(
-    (element) => element.options.length,
-  );
-  const qearnActionOptions = await qearnActionSelector.evaluate(
-    (element) => element.options.length,
-  );
-  const runQearnStats = qearnScreen.getByRole("button", {
-    name: "Run Protocol stats",
-    exact: true,
-  });
-  const qearnStatsVisible = await runQearnStats.isVisible();
-  const qearnWalletActions = await qearnScreen
+  const lockDialogBox = await page.locator(".task-dialog").boundingBox();
+  const lockConnect = await lockScreen
     .getByRole("button", { name: "Connect wallet", exact: true })
     .count();
-  const taskDialogBox = await page.locator(".task-dialog").boundingBox();
-  const qearnScreenBox = await qearnScreen.boundingBox();
-  const qearnContractBox = await qearnContractSelector.boundingBox();
-  const qearnActionBox = await qearnActionSelector.boundingBox();
-  const selectorsFullWidth =
-    qearnScreenBox !== null &&
-    qearnContractBox !== null &&
-    qearnActionBox !== null &&
-    Math.abs(qearnContractBox.width - qearnScreenBox.width) < 4 &&
-    Math.abs(qearnActionBox.width - qearnScreenBox.width) < 4;
-  const qearnResults = await new AxeBuilder({ page })
+  const lockInputs = await lockScreen.locator("input").count();
+  const lockSelectors = await lockScreen.locator("select").count();
+  const lockResults = await new AxeBuilder({ page })
     .include(".task-dialog")
     .analyze();
-  const qearnSerious = qearnResults.violations.filter((violation) =>
+  const lockSerious = lockResults.violations.filter((violation) =>
     ["serious", "critical"].includes(violation.impact ?? ""),
   );
   await page.screenshot({
-    path: `artifacts/screenshots/${viewport.name}/qearn.png`,
+    path: `artifacts/screenshots/${viewport.name}/lock-qus.png`,
     fullPage: true,
   });
-  await qearnActionSelector.selectOption("qearn-lock");
-  const qearnProcedureConnect = await qearnScreen
-    .getByRole("button", { name: "Connect wallet", exact: true })
-    .count();
-  const qearnProcedureInputs = await qearnScreen.locator("input").count();
   observations.push({
     viewport: viewport.name,
-    screen: "qearn",
-    contractOptions,
-    actionOptions: qearnActionOptions,
-    runQueryVisible: qearnStatsVisible,
-    walletActions: qearnWalletActions,
-    procedureConnect: qearnProcedureConnect,
-    procedureInputs: qearnProcedureInputs,
-    selectorsFullWidth,
-    modalWidth: taskDialogBox?.width ?? 0,
-    seriousAccessibilityIssues: qearnSerious.length,
+    screen: "Lock QUs",
+    connectActions: lockConnect,
+    formInputs: lockInputs,
+    selectors: lockSelectors,
+    modalWidth: lockDialogBox?.width ?? 0,
+    seriousAccessibilityIssues: lockSerious.length,
   });
   if (
-    contractOptions !== 2 ||
-    qearnActionOptions !== 2 ||
-    !qearnStatsVisible ||
-    qearnWalletActions !== 0 ||
-    qearnProcedureConnect !== 1 ||
-    qearnProcedureInputs !== 0 ||
-    !selectorsFullWidth ||
-    (taskDialogBox && taskDialogBox.width > 480) ||
-    qearnSerious.length
+    lockConnect !== 1 ||
+    lockInputs !== 0 ||
+    lockSelectors !== 0 ||
+    (lockDialogBox && lockDialogBox.width > 480) ||
+    lockSerious.length
   ) {
     failures.push({
-      viewport: `${viewport.name}-qearn`,
-      contractOptions,
-      qearnActionOptions,
-      runQueryVisible: qearnStatsVisible,
-      walletActions: qearnWalletActions,
-      qearnProcedureConnect,
-      qearnProcedureInputs,
-      selectorsFullWidth,
-      modalWidth: taskDialogBox?.width ?? 0,
-      serious: qearnSerious,
+      viewport: `${viewport.name}-lock-qus`,
+      lockConnect,
+      lockInputs,
+      lockSelectors,
+      modalWidth: lockDialogBox?.width ?? 0,
+      serious: lockSerious,
     });
   }
 
   await page.keyboard.press("Escape");
   await page.locator(".task-dialog").waitFor({ state: "detached" });
-  const qearnButton = page.getByRole("button", {
-    name: "QEarn",
+  const lockButton = page.getByRole("button", {
+    name: "Lock QUs",
     exact: true,
   });
   await page.waitForFunction(
     (button) => button === document.activeElement,
-    await qearnButton.elementHandle(),
+    await lockButton.elementHandle(),
   );
-  const qearnFocusRestored = await page
-    .getByRole("button", { name: "QEarn", exact: true })
-    .evaluate((element) => element === document.activeElement);
-  if (!qearnFocusRestored)
+  const lockFocusRestored = await lockButton.evaluate(
+    (element) => element === document.activeElement,
+  );
+  if (!lockFocusRestored)
     failures.push({
-      viewport: `${viewport.name}-qearn-focus`,
-      qearnFocusRestored,
+      viewport: `${viewport.name}-lock-qus-focus`,
+      lockFocusRestored,
     });
-  await page.getByRole("button", { name: "QUtil", exact: true }).click();
-  const qutilScreen = page
-    .locator(".task-dialog")
-    .locator(".contract-examples-screen");
-  await qutilScreen
-    .getByRole("heading", { name: "QUtil", exact: true })
+
+  await page.getByRole("button", { name: "Send to many", exact: true }).click();
+  const sendScreen = page.locator(".task-dialog .procedure-screen");
+  await sendScreen
+    .getByRole("heading", { name: "Send to many", exact: true })
     .waitFor();
-  const qutilActionSelector = qutilScreen.locator(
-    "#starter-contract-action-selector",
-  );
-  const qutilActionOptions = await qutilActionSelector.evaluate(
-    (element) => element.options.length,
-  );
-  const runQutilFees = qutilScreen.getByRole("button", {
-    name: "Run Protocol fees",
-    exact: true,
-  });
-  const qutilFeesVisible = await runQutilFees.isVisible();
-  await qutilActionSelector.selectOption("q-util-vote");
-  const qutilProcedureConnect = await qutilScreen
+  const sendDialogBox = await page.locator(".task-dialog").boundingBox();
+  const sendConnect = await sendScreen
     .getByRole("button", { name: "Connect wallet", exact: true })
     .count();
-  const qutilProcedureInputs = await qutilScreen.locator("input").count();
-  observations.push({
-    viewport: viewport.name,
-    screen: "q-util",
-    actionOptions: qutilActionOptions,
-    runQueryVisible: qutilFeesVisible,
-    procedureConnect: qutilProcedureConnect,
-    procedureInputs: qutilProcedureInputs,
-  });
-  if (
-    qutilActionOptions !== 2 ||
-    !qutilFeesVisible ||
-    qutilProcedureConnect !== 1 ||
-    qutilProcedureInputs !== 0
-  ) {
-    failures.push({
-      viewport: `${viewport.name}-q-util`,
-      qutilActionOptions,
-      runQueryVisible: qutilFeesVisible,
-      qutilProcedureConnect,
-      qutilProcedureInputs,
-    });
-  }
+  const sendInputs = await sendScreen.locator("input").count();
+  const sendSelectors = await sendScreen.locator("select").count();
+  const sendResults = await new AxeBuilder({ page })
+    .include(".task-dialog")
+    .analyze();
+  const sendSerious = sendResults.violations.filter((violation) =>
+    ["serious", "critical"].includes(violation.impact ?? ""),
+  );
   await page.screenshot({
-    path: `artifacts/screenshots/${viewport.name}/q-util.png`,
+    path: `artifacts/screenshots/${viewport.name}/send-to-many.png`,
     fullPage: true,
   });
+  observations.push({
+    viewport: viewport.name,
+    screen: "Send to many",
+    connectActions: sendConnect,
+    formInputs: sendInputs,
+    selectors: sendSelectors,
+    modalWidth: sendDialogBox?.width ?? 0,
+    seriousAccessibilityIssues: sendSerious.length,
+  });
+  if (
+    sendConnect !== 1 ||
+    sendInputs !== 0 ||
+    sendSelectors !== 0 ||
+    (sendDialogBox && sendDialogBox.width > 480) ||
+    sendSerious.length
+  ) {
+    failures.push({
+      viewport: `${viewport.name}-send-to-many`,
+      sendConnect,
+      sendInputs,
+      sendSelectors,
+      modalWidth: sendDialogBox?.width ?? 0,
+      serious: sendSerious,
+    });
+  }
   await page.keyboard.press("Escape");
   await page
     .getByRole("button", { name: "Sign & Verify", exact: true })

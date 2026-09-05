@@ -26,7 +26,9 @@ export function AccountDialog() {
   async function copyIdentity() {
     try {
       await navigator.clipboard.writeText(identity!);
-      toast.success("Identity copied.");
+      toast.success("Identity copied.", {
+        icon: <Identicon identity={identity!} size={20} />,
+      });
     } catch {
       toast.message("Select the identity below to copy it.");
     }

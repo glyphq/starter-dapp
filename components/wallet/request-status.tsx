@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { glyphRequestMilestoneLabel } from "@/lib/connectors/glyph";
+import { Identicon } from "./identicon";
 import { useWalletSession } from "./wallet-session-provider";
 
 export function LoadingIcon() {
@@ -10,9 +11,17 @@ export function LoadingIcon() {
 }
 
 export function RequestStatus() {
-  const { pendingAction, error, notice, feedback, dismissFeedback } =
-    useWalletSession();
+  const {
+    wallet,
+    pendingAction,
+    error,
+    notice,
+    noticeIdentity,
+    feedback,
+    dismissFeedback,
+  } = useWalletSession();
   const pendingToast = useRef<string | number | null>(null);
+  const identity = wallet.account?.identity;
 
   useEffect(() => {
     if (!pendingAction) {
@@ -25,9 +34,10 @@ export function RequestStatus() {
 
     if (pendingToast.current !== null) toast.dismiss(pendingToast.current);
     pendingToast.current = toast.loading(pendingAction, {
+      icon: identity ? <Identicon identity={identity} size={20} /> : undefined,
       description: "Keep this page open. Any approval happens in your wallet.",
     });
-  }, [pendingAction]);
+  }, [identity, pendingAction]);
 
   useEffect(() => {
     if (!pendingAction || !feedback || feedback.state === "completed") return;
@@ -35,21 +45,29 @@ export function RequestStatus() {
     pendingToast.current = id;
     toast.loading(pendingAction, {
       id,
+      icon: identity ? <Identicon identity={identity} size={20} /> : undefined,
       description: glyphRequestMilestoneLabel(feedback.state),
     });
-  }, [feedback, pendingAction]);
+  }, [feedback, identity, pendingAction]);
 
   useEffect(() => {
     if (!error) return;
-    toast.error("Request not completed", { description: error });
+    toast.error("Request not completed", {
+      description: error,
+      icon: identity ? <Identicon identity={identity} size={20} /> : undefined,
+    });
     dismissFeedback();
-  }, [dismissFeedback, error]);
+  }, [dismissFeedback, error, identity]);
 
   useEffect(() => {
     if (!notice) return;
-    toast.success(notice);
+    toast.success(notice, {
+      icon: noticeIdentity ? (
+        <Identicon identity={noticeIdentity} size={20} />
+      ) : undefined,
+    });
     dismissFeedback();
-  }, [dismissFeedback, notice]);
+  }, [dismissFeedback, notice, noticeIdentity]);
 
   useEffect(() => {
     return () => {

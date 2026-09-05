@@ -25,6 +25,7 @@ type WalletSession = {
   pendingAction: string | null;
   error: string | null;
   notice: string | null;
+  noticeIdentity: string | null;
   feedback: GlyphRequestFeedback | null;
   dialogOpen: boolean;
   pairingUri: string | null;
@@ -51,6 +52,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeIdentity, setNoticeIdentity] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<GlyphRequestFeedback | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pairingUri, setPairingUri] = useState<string | null>(null);
@@ -63,16 +65,17 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   // WalletProvider.connect reports rejection through wallet.error, not a rejected
   // promise. Only an observed account transition establishes successful connection.
   if (previousAccountKey !== accountKey) {
+    const previousIdentity = previousAccountKey.split(":")[1];
     setPreviousAccountKey(accountKey);
     setDialogOpen(false);
     setPairingUri(null);
     setError(null);
     setFeedback(null);
-    setNotice(
-      wallet.account
-        ? "Wallet connected. Requests still require approval in your wallet."
-        : "Wallet disconnected. Your keys remain in your wallet.",
+    setNoticeIdentity(
+      wallet.account?.identity ??
+        (previousIdentity === "none" ? null : previousIdentity),
     );
+    setNotice(wallet.account ? "Wallet connected." : "Wallet disconnected.");
   }
 
   useEffect(() => {
@@ -128,6 +131,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
   function dismissFeedback() {
     setError(null);
     setNotice(null);
+    setNoticeIdentity(null);
     setFeedback(null);
     setDismissedWalletError(wallet.error);
   }
@@ -205,7 +209,6 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
       async () => {
         await wallet.disconnect();
         setPairingUri(null);
-        setNotice("Wallet disconnected. Your keys remain in your wallet.");
       },
       "Could not disconnect. Try again.",
     );
@@ -222,6 +225,7 @@ export function WalletSessionProvider({ children }: { children: ReactNode }) {
             ? "Connection was not completed. Check your wallet, then try again."
             : null),
         notice,
+        noticeIdentity,
         feedback,
         dialogOpen,
         pairingUri,
