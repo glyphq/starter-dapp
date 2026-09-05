@@ -9,14 +9,8 @@ export function LoadingIcon() {
 }
 
 export function RequestStatus() {
-  const {
-    pendingAction,
-    error,
-    notice,
-    feedback,
-    dismissFeedback,
-    dialogOpen,
-  } = useWalletSession();
+  const { pendingAction, error, feedback, dismissFeedback, dialogOpen } =
+    useWalletSession();
   // Connection success is already visible in the account control.
   if (!error && (!pendingAction || dialogOpen)) return null;
   const interrupted = feedback?.state === "interrupted";
@@ -29,8 +23,7 @@ export function RequestStatus() {
     error ??
     (pendingAction && feedback && feedback.state !== "completed"
       ? glyphRequestMilestoneLabel(feedback.state)
-      : (notice ??
-        "Keep this page open. Any approval happens in your wallet."));
+      : "Keep this page open. Any approval happens in your wallet.");
   return (
     <div
       className={`session-feedback ${error ? "is-error" : ""}`}

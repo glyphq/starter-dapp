@@ -2,12 +2,19 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { identityToPublicKey, k12, verify } from "@qubic.org/crypto";
+import {
+  BadgeCheckIcon,
+  CopyIcon,
+  PenLineIcon,
+  WalletIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWalletSession } from "@/components/wallet/wallet-session-provider";
 import { requestGlyphVerification } from "@/lib/connectors/glyph";
 import { signatureBytes, validateSignatureInputs } from "@/lib/signatures";
+
+type SignatureMode = "sign" | "verify";
 
 export function SignaturesScreen() {
   const {
@@ -17,7 +24,7 @@ export function SignaturesScreen() {
     ensureGlyphReady,
     openWalletDialog,
   } = useWalletSession();
-  const [tab, setTab] = useState("sign");
+  const [mode, setMode] = useState<SignatureMode>("sign");
   const [message, setMessage] = useState("");
   const [signatureInput, setSignatureInput] = useState("");
   const [resultAccount, setResultAccount] = useState<string | null>(null);
@@ -25,6 +32,7 @@ export function SignaturesScreen() {
   const [verified, setVerified] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const inFlight = useRef(false);
   const busy = working || pendingAction !== null;
@@ -39,6 +47,7 @@ export function SignaturesScreen() {
     setVerified(null);
     setError(null);
     setNotice(null);
+    setCopyStatus(null);
   }
 
   function clearResults() {
@@ -46,15 +55,22 @@ export function SignaturesScreen() {
     setVerified(null);
     setError(null);
     setNotice(null);
+    setCopyStatus(null);
   }
 
-  async function submit(event: FormEvent, mode: "sign" | "verify") {
+  function switchMode(nextMode: SignatureMode) {
+    if (busy) return;
+    setMode(nextMode);
+    clearResults();
+  }
+
+  async function submit(event: FormEvent, nextMode: SignatureMode) {
     event.preventDefault();
     if (busy || inFlight.current) return;
     clearResults();
     const validationError = validateSignatureInputs(
       message,
-      mode === "verify" ? signatureInput : undefined,
+      nextMode === "verify" ? signatureInput : undefined,
     );
     if (validationError) {
       setError(validationError);
@@ -65,7 +81,6 @@ export function SignaturesScreen() {
       openWalletDialog();
       return;
     }
-    // Preparation never resumes this action. A fresh click keeps wallet launch user-initiated.
     if (isGlyph && !ensureGlyphReady()) {
       setNotice("Preparing Glyph. When ready, press the action button again.");
       return;
@@ -73,12 +88,11 @@ export function SignaturesScreen() {
     inFlight.current = true;
     setWorking(true);
     const failureMessage =
-      mode === "sign"
+      nextMode === "sign"
         ? "The message could not be signed. Try again."
         : "The signature could not be verified. Check the inputs and try again.";
     try {
-      // runAction invokes its operation synchronously, before any await here.
-      if (mode === "sign") {
+      if (nextMode === "sign") {
         const result = await runAction(
           "Signing message",
           () => wallet.signMessage(message),
@@ -115,6 +129,22 @@ export function SignaturesScreen() {
     }
   }
 
+  async function copySignature() {
+    if (!signature) return;
+    try {
+      await navigator.clipboard.writeText(signature);
+      setCopyStatus("Signature copied.");
+    } catch {
+      setCopyStatus("Select the signature to copy it.");
+    }
+  }
+
+  const title = mode === "sign" ? "Sign a message" : "Verify a signature";
+  const description =
+    mode === "sign"
+      ? "Write a message, then approve it in your wallet."
+      : "Check a signature against your connected identity.";
+
   return (
     <section
       className="flow-panel signatures-screen"
@@ -122,29 +152,16 @@ export function SignaturesScreen() {
       aria-busy={busy}
     >
       <header className="flow-heading">
-        <h2 id="signatures-heading">Sign &amp; Verify</h2>
-        <p>
-          Sign a message or check a signature against your connected identity.
-        </p>
+        <h2 id="signatures-heading">{title}</h2>
+        <p>{description}</p>
       </header>
-      <Tabs
-        value={tab}
-        onValueChange={(value) => {
-          if (busy) return;
-          setTab(String(value));
-          clearResults();
-        }}
+
+      <form
+        className="task-form signature-form"
+        onSubmit={(event) => void submit(event, mode)}
       >
-        <TabsList aria-label="Signature actions">
-          <TabsTrigger value="sign" disabled={busy}>
-            Sign message
-          </TabsTrigger>
-          <TabsTrigger value="verify" disabled={busy}>
-            Verify signature
-          </TabsTrigger>
-        </TabsList>
-        <div className="signature-message">
-          <label htmlFor="signature-message">Message</label>
+        <label htmlFor="signature-message">
+          Message
           <textarea
             id="signature-message"
             className="message-textarea"
@@ -158,104 +175,125 @@ export function SignaturesScreen() {
               clearResults();
             }}
           />
-        </div>
-        <TabsContent value="sign">
-          <form
-            className="task-form"
-            onSubmit={(event) => void submit(event, "sign")}
-          >
-            <p className="notice">
-              Signing can authorize actions in other apps. Read messages
-              carefully; this request does not transfer funds.
-            </p>
-            <div className="form-actions">
-              {connected ? (
-                <Button type="submit" disabled={busy}>
-                  {working ? "Signing…" : "Sign message"}
-                </Button>
+        </label>
+
+        {mode === "verify" && (
+          <label htmlFor="signature-hex">
+            Signature
+            <Input
+              id="signature-hex"
+              value={signatureInput}
+              disabled={busy}
+              placeholder="128 hexadecimal characters"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => {
+                setSignatureInput(event.target.value);
+                clearResults();
+              }}
+            />
+          </label>
+        )}
+
+        <p className="notice">
+          {mode === "sign"
+            ? "Read messages carefully. Signing does not transfer funds."
+            : isGlyph
+              ? "Glyph Wallet checks the signature."
+              : "Verification runs locally in your browser."}
+        </p>
+        <div className="form-actions task-action-stack">
+          {connected ? (
+            <Button type="submit" disabled={busy}>
+              {mode === "sign" ? (
+                <PenLineIcon aria-hidden="true" />
               ) : (
-                <Button
-                  type="button"
-                  onClick={openWalletDialog}
-                  disabled={busy}
-                >
-                  Connect to sign
-                </Button>
+                <BadgeCheckIcon aria-hidden="true" />
               )}
-            </div>
-          </form>
-          {signature !== null && resultAccount === accountKey && (
-            <div className="output-block" role="status">
-              <p className="result-line">Message signed. Signature:</p>
-              <code className="signature-output break-all">{signature}</code>
+              {working
+                ? mode === "sign"
+                  ? "Signing…"
+                  : "Verifying…"
+                : mode === "sign"
+                  ? "Sign message"
+                  : "Verify signature"}
+            </Button>
+          ) : (
+            <Button type="button" onClick={openWalletDialog} disabled={busy}>
+              <WalletIcon aria-hidden="true" />
+              Connect wallet
+            </Button>
+          )}
+          {connected &&
+            (mode === "sign" ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => switchMode("verify")}
+                disabled={busy}
+              >
+                <BadgeCheckIcon aria-hidden="true" />
+                Verify an existing signature
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => switchMode("sign")}
+                disabled={busy}
+              >
+                <PenLineIcon aria-hidden="true" />
+                Sign a message
+              </Button>
+            ))}
+        </div>
+      </form>
+
+      {mode === "sign" &&
+        signature !== null &&
+        resultAccount === accountKey && (
+          <div className="signature-result" role="status" aria-live="polite">
+            <span className="data-label">Signature ready</span>
+            <code className="signature-output">{signature}</code>
+            <div className="form-actions task-action-stack">
               <Button
                 variant="outline"
-                className="signature-next"
+                onClick={() => void copySignature()}
+                disabled={busy}
+              >
+                <CopyIcon aria-hidden="true" />
+                Copy signature
+              </Button>
+              <Button
+                variant="outline"
                 disabled={busy}
                 onClick={() => {
                   setSignatureInput(signature);
-                  setTab("verify");
+                  setMode("verify");
                   clearResults();
                 }}
               >
+                <BadgeCheckIcon aria-hidden="true" />
                 Verify this signature
               </Button>
             </div>
-          )}
-        </TabsContent>
-        <TabsContent value="verify">
-          <form
-            className="task-form"
-            onSubmit={(event) => void submit(event, "verify")}
-          >
-            <label htmlFor="signature-hex">
-              Signature
-              <Input
-                id="signature-hex"
-                value={signatureInput}
-                disabled={busy}
-                placeholder="128 hexadecimal characters"
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(event) => {
-                  setSignatureInput(event.target.value);
-                  clearResults();
-                }}
-              />
-            </label>
-            <p className="notice">
-              {isGlyph
-                ? "Glyph Wallet checks the signature."
-                : "Verification runs locally in your browser."}
-            </p>
-            <div className="form-actions">
-              {connected ? (
-                <Button type="submit" disabled={busy}>
-                  {working ? "Verifying…" : "Verify signature"}
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={openWalletDialog}
-                  disabled={busy}
-                >
-                  Connect to verify
-                </Button>
-              )}
-            </div>
-          </form>
-          {verified !== null && resultAccount === accountKey && (
-            <p
-              className={verified ? "result-line" : "error-line"}
-              role="status"
-            >
-              {verified
-                ? "Signature is valid for this message and connected identity."
-                : "Signature is not valid for this message and connected identity."}
-            </p>
-          )}
-        </TabsContent>
-      </Tabs>
+          </div>
+        )}
+
+      {mode === "verify" &&
+        verified !== null &&
+        resultAccount === accountKey && (
+          <p className={verified ? "result-line" : "error-line"} role="status">
+            {verified
+              ? "Signature is valid for this message and connected identity."
+              : "Signature is not valid for this message and connected identity."}
+          </p>
+        )}
+      {copyStatus && (
+        <p className="help-text" role="status">
+          {copyStatus}
+        </p>
+      )}
       {notice && (
         <p className="notice" role="status">
           {notice}

@@ -3,10 +3,10 @@ import { referenceFlows } from "./starter-app";
 import { isGlyphLaunchAbort } from "@/lib/connectors/glyph-launch";
 
 describe("Qubic reference workspace", () => {
-  test("offers two task-first examples with account management outside navigation", () => {
+  test("defines two modal starter actions with account management outside the task surface", () => {
     expect(referenceFlows.map((flow) => flow.label)).toEqual([
       "Sign & Verify",
-      "RandomLottery",
+      "Contract call",
     ]);
     expect(referenceFlows).toHaveLength(2);
   });
