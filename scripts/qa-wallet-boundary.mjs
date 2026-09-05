@@ -201,6 +201,14 @@ try {
   await dialog
     .getByText("1,234,567,890,123,456,789 QU", { exact: true })
     .waitFor();
+  assert.equal(await dialog.getByText(/As of tick/).count(), 0);
+  assert.equal(
+    await dialog
+      .getByRole("button", { name: "Refresh balance", exact: true })
+      .locator("svg")
+      .count(),
+    1,
+  );
   assert.equal(await dialog.getByText(identity, { exact: true }).count(), 1);
   assert.equal(await dialog.locator(".identity-avatar svg").count(), 1);
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -208,6 +216,20 @@ try {
     .getByRole("button", { name: "Copy identity", exact: true })
     .click();
   await page.getByText("Identity copied.", { exact: true }).waitFor();
+  assert.equal(
+    await dialog
+      .getByRole("button", { name: "Copy identity", exact: true })
+      .locator("svg")
+      .count(),
+    1,
+  );
+  assert.equal(
+    await dialog
+      .getByRole("button", { name: "Disconnect", exact: true })
+      .locator("svg")
+      .count(),
+    1,
+  );
   assert.equal(
     await page.evaluate(() => navigator.clipboard.readText()),
     identity,
@@ -253,7 +275,7 @@ try {
       connectShowsSigningForm: true,
       qearnAndQUtilProcedureRequestsUsePackageTypedInputs: true,
       disconnectClearsSession: true,
-      accountModalIdentityAvatarAndExactBalance: true,
+      accountModalCompactBalanceAndIdentityActions: true,
       escapeRestoresFocus: true,
       spinnerInsideSelectedProvider: true,
       noConnectionSuccessBanner: true,

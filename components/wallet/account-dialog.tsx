@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useBalance } from "@qubic.org/react";
+import { CopyIcon, LogOutIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,41 +59,54 @@ export function AccountDialog() {
           <strong>{wallet.account?.name || "Connected account"}</strong>
         </div>
         <div className="account-balance" aria-live="polite">
-          <span className="data-label">Balance</span>
+          <div className="account-balance-heading">
+            <span className="data-label">Balance</span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Refresh balance"
+              title="Refresh balance"
+              disabled={balance.isFetching}
+              onClick={() => void balance.refetch()}
+            >
+              <RefreshCwIcon
+                className={balance.isFetching ? "animate-spin" : undefined}
+                aria-hidden="true"
+              />
+            </Button>
+          </div>
           {balance.data ? (
-            <>
-              <strong>{balance.data.balance.toLocaleString("en-US")} QU</strong>
-              <span className="help-text">
-                As of tick {balance.data.validForTick.toLocaleString("en-US")}
-                {balance.isError ? " · Refresh unavailable" : ""}
-              </span>
-            </>
+            <strong>{balance.data.balance.toLocaleString("en-US")} QU</strong>
           ) : (
             <strong>
               {balance.isError ? "Balance unavailable" : "Loading balance…"}
             </strong>
           )}
-          <Button
-            variant="ghost"
-            disabled={balance.isFetching}
-            onClick={() => void balance.refetch()}
-          >
-            {balance.isFetching ? "Refreshing…" : "Refresh balance"}
-          </Button>
         </div>
         <div className="account-identity">
-          <span className="data-label">Public identity</span>
+          <div className="account-identity-heading">
+            <span className="data-label">Public identity</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => void copyIdentity()}
+              aria-label="Copy identity"
+            >
+              <CopyIcon aria-hidden="true" />
+              Copy
+            </Button>
+          </div>
           <code>{identity}</code>
         </div>
-        <div className="form-actions">
-          <Button variant="outline" onClick={() => void copyIdentity()}>
-            Copy identity
-          </Button>
+        <div className="account-actions">
           <Button
             variant="outline"
+            size="sm"
             disabled={Boolean(pendingAction)}
             onClick={disconnect}
           >
+            <LogOutIcon aria-hidden="true" />
             Disconnect
           </Button>
         </div>
