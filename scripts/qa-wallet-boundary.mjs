@@ -184,19 +184,23 @@ try {
     fullPage: true,
   });
   await sendDialog
-    .getByRole("button", { name: "Send 1 of 2", exact: true })
+    .getByRole("button", { name: "Approve QUtil call 1 of 2", exact: true })
     .click();
   assert.equal(
     await sendDialog
-      .getByText("Recipient 1 of 2 approved.", { exact: true })
+      .getByText("QUtil procedure 1 of 2 approved.", { exact: true })
       .count(),
     0,
   );
-  await page.getByText("Recipient 1 of 2 approved.", { exact: true }).waitFor();
+  await page
+    .getByText("QUtil procedure 1 of 2 approved.", { exact: true })
+    .waitFor();
   await sendDialog
-    .getByRole("button", { name: "Send 2 of 2", exact: true })
+    .getByRole("button", { name: "Approve QUtil call 2 of 2", exact: true })
     .click();
-  await page.getByText("Recipient 2 of 2 approved.", { exact: true }).waitFor();
+  await page
+    .getByText("QUtil procedure 2 of 2 approved.", { exact: true })
+    .waitFor();
   const contractRequests = await page.evaluate(
     () => window.__qaContractRequests,
   );

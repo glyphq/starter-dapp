@@ -114,12 +114,12 @@ export function SendToManyScreen() {
             amount: procedure.amount,
           });
         },
-        "The send request was not completed. Check your wallet, then try again.",
+        "The QUtil procedure was not completed. Check your wallet, then try again.",
       );
       if (result !== undefined) {
         setCompletedRecipients((current) => current + 1);
         toast.success(
-          `Recipient ${nextRecipient} of ${procedures.length} approved.`,
+          `QUtil procedure ${nextRecipient} of ${procedures.length} approved.`,
           {
             icon: identity ? (
               <Identicon identity={identity} size={20} />
@@ -140,7 +140,7 @@ export function SendToManyScreen() {
       >
         <header className="flow-heading">
           <h2 id="send-to-many-title">Send to many</h2>
-          <p>Connect a wallet to prepare QUtil send requests.</p>
+          <p>Connect a wallet to prepare a QUtil SendToMany V1 procedure.</p>
         </header>
         <div className="form-actions task-action-stack">
           <Button type="button" onClick={openWalletDialog} disabled={busy}>
@@ -160,7 +160,9 @@ export function SendToManyScreen() {
     >
       <header className="flow-heading">
         <h2 id="send-to-many-title">Send to many</h2>
-        <p>Add recipients, then approve one QUtil request for each.</p>
+        <p>
+          QUtil SendToMany V1 procedure. Add recipients, then approve each call.
+        </p>
       </header>
       <form
         className="task-form contract-procedure-form"
@@ -232,8 +234,8 @@ export function SendToManyScreen() {
             {working
               ? "Opening wallet…"
               : allRecipientsSent
-                ? "All recipients sent"
-                : `Send ${nextRecipient} of ${recipients.length}`}
+                ? "All QUtil calls approved"
+                : `Approve QUtil call ${nextRecipient} of ${recipients.length}`}
           </Button>
         </div>
       </form>

@@ -29,7 +29,7 @@ describe("reviewed starter procedures", () => {
     const procedure = procedures[0];
 
     expect(procedure).toMatchObject({
-      label: "Send to recipient 1",
+      label: "QUtil SendToMany V1 for recipient 1",
       contractIndex: 4,
       inputType: 1,
       amount: "0",
@@ -40,7 +40,9 @@ describe("reviewed starter procedures", () => {
       56,
     );
     expect(procedures).toHaveLength(2);
-    expect(procedures[1]).toMatchObject({ label: "Send to recipient 2" });
+    expect(procedures[1]).toMatchObject({
+      label: "QUtil SendToMany V1 for recipient 2",
+    });
   });
 
   test("rejects unsafe direct procedure values before a wallet request", () => {

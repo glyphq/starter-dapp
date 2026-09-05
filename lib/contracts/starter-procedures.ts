@@ -95,7 +95,7 @@ export function prepareSendToMany(
     );
 
     return {
-      label: `Send to recipient ${index + 1}`,
+      label: `QUtil SendToMany V1 for recipient ${index + 1}`,
       contractIndex: call.contractIndex,
       inputType: call.inputType,
       payload: call.payload,
