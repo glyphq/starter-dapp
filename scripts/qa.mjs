@@ -13,7 +13,11 @@ for (const viewport of [
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
   const errors = [];
+  const relayRequests = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (request) => {
+    if (new URL(request.url()).hostname === "relay.glyphq.org") relayRequests.push(request.url());
+  });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   const results = await new AxeBuilder({ page }).analyze();
@@ -28,6 +32,13 @@ for (const viewport of [
     ["serious", "critical"].includes(violation.impact ?? ""),
   );
   const dialogVisible = await page.getByRole("dialog").isVisible();
+  if (new URL(baseUrl).protocol === "http:") {
+    const originGuidance = await page.getByText("Glyph requires a public HTTPS origin.", { exact: false }).isVisible();
+    const glyphChoices = await page.getByRole("button", { name: /Glyph Wallet/ }).count();
+    if (!originGuidance || glyphChoices !== 0 || relayRequests.length !== 0) {
+      failures.push({ viewport: `${viewport.name}-local-origin`, originGuidance, glyphChoices, relayRequestCount: relayRequests.length });
+    }
+  }
   await page.screenshot({ path: `artifacts/screenshots/${viewport.name}/connectors.png`, fullPage: true });
   if (!dialogVisible || dialogSerious.length) {
     failures.push({ viewport: `${viewport.name}-dialog`, dialogVisible, serious: dialogSerious });

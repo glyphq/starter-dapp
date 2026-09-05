@@ -22,12 +22,16 @@ let prepareCount = 0;
 let subscribeCount = 0;
 const requests: Array<{ nonce: string; callback: string }> = [];
 
+const { canonicalDappOrigin } = await import("@glyph-oss/connect");
+
 Object.assign(globalThis, {
-  window: { dispatchEvent: () => true, focus: () => undefined },
+  window: {
+    location: { origin: "https://dapp.example" }, dispatchEvent: () => true, focus: () => undefined },
   localStorage: { getItem: () => null, removeItem: () => undefined, setItem: () => undefined },
 });
 
 mock.module("@glyph-oss/connect", () => ({
+  canonicalDappOrigin,
   createConnectRequest: (request: Record<string, unknown>) => ({
     ...request,
     nonce: `connect-nonce-${prepareCount + 1}`,

@@ -29,8 +29,11 @@ function createPreparation(): Preparation {
   return { promise, resolve, reject };
 }
 
+const { canonicalDappOrigin } = await import("@glyph-oss/connect");
+
 Object.assign(globalThis, {
-  window: { dispatchEvent: () => true, focus: () => undefined },
+  window: {
+    location: { origin: "https://dapp.example" }, dispatchEvent: () => true, focus: () => undefined },
   localStorage: {
     getItem: () => localStorageValue,
     removeItem: () => { localStorageValue = null as unknown as string; },
@@ -39,6 +42,7 @@ Object.assign(globalThis, {
 });
 
 mock.module("@glyph-oss/connect", () => ({
+  canonicalDappOrigin,
   createConnectRequest: (request: Record<string, unknown>) => ({ ...request, nonce: "connect-nonce", exp: 2_000_000_000 }),
   createScCallRequest: (request: Record<string, unknown>) => ({ ...request, nonce: "sc-call-nonce", exp: 2_000_000_000 }),
   createSignMessageRequest: (request: Record<string, unknown>) => ({ ...request, nonce: "sign-nonce", exp: 2_000_000_000 }),

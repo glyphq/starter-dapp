@@ -34,7 +34,7 @@ verification. Verification is local against the connected identity for the
 extension and WalletConnect paths; Glyph uses its native verification request.
 
 Glyph-specific actions are intentionally explicit: connect requests ask for
-`transfer` and `sign_message`, transfer and signing requests are sent through
+`transfer`, `sc_call`, and `sign_message`, transfer and signing requests are sent through
 `@glyph-oss/connect`, and each request is bound to `qubic:mainnet`. Treat the
 transfer screen as a real wallet approval flow, not a mock transaction.
 
@@ -76,8 +76,11 @@ NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
 
 `NEXT_PUBLIC_APP_ORIGIN` is used as the dApp origin in wallet metadata and
 Glyph requests. For a deployed Glyph flow it should be a credential-free,
-canonical HTTPS origin without a path, query, or fragment. The app currently
-falls back to its demo origin when this variable is absent.
+canonical HTTPS origin without a path, query, or fragment. When absent or blank,
+the current browser origin is used. An explicit override must match the page
+origin. There is no demo-origin fallback. Local HTTP browsing and extension
+flows still work, but Glyph requires a public HTTPS deployment or tunnel.
+The connector chooser explains missing configuration before preparing a relay.
 
 Both variables are client-visible configuration. They are not places for
 private keys, API tokens, relay capabilities, callback URLs, or wallet session
@@ -151,9 +154,9 @@ bun run build
 python3 -m http.server 4174 -d out
 ```
 
-For a deployed Glyph flow, the serving origin must match the value configured
-in `NEXT_PUBLIC_APP_ORIGIN`. WalletConnect also uses the configured origin in
-its client metadata.
+For a deployed Glyph flow, leave `NEXT_PUBLIC_APP_ORIGIN` blank to use the
+serving origin, or configure that exact origin at build time. WalletConnect
+also uses this public HTTPS origin policy for its client metadata.
 
 ## Project map
 

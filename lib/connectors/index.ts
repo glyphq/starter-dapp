@@ -33,4 +33,3 @@ export const connectors: WalletConnector[] = [
 ];
 
 export const hasWalletConnectProjectId = Boolean(walletConnectProjectId);
-;

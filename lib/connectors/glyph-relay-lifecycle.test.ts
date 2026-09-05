@@ -12,8 +12,11 @@ const lifecycleDetails: Array<{
 }> = [];
 const events: string[] = [];
 
+const { canonicalDappOrigin } = await import("@glyph-oss/connect");
+
 Object.assign(globalThis, {
   window: {
+    location: { origin: "https://dapp.example" },
     dispatchEvent: (event: Event) => {
       lifecycleDetails.push((event as CustomEvent<(typeof lifecycleDetails)[number]>).detail);
       return true;
@@ -42,6 +45,7 @@ const result = {
 let subscribeOptions: Record<string, unknown> | undefined;
 
 mock.module("@glyph-oss/connect", () => ({
+  canonicalDappOrigin,
   createConnectRequest: (request: Record<string, unknown>) => ({
     ...request,
     nonce: "connect-nonce-1234",

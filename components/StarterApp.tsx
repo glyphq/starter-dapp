@@ -36,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { getGlyphAppOrigin, GLYPH_ORIGIN_ERROR } from "@/lib/connectors/glyph-origin";
 import { hasWalletConnectProjectId } from "@/lib/connectors";
 import {
   GLYPH_REQUEST_STATUS_EVENT,
@@ -282,6 +283,7 @@ export function StarterApp() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [glyphFeedback, setGlyphFeedback] = useState<GlyphRequestFeedback | null>(null);
   const [glyphRelayPreparing, setGlyphRelayPreparing] = useState(false);
+  const [glyphOriginError, setGlyphOriginError] = useState<string | null>(null);
   const [copiedIdentity, setCopiedIdentity] = useState(false);
   const [message, setMessage] = useState("Hello from Qubic.");
   const [verifySignature, setVerifySignature] = useState("");
@@ -332,6 +334,13 @@ export function StarterApp() {
 
   const prepareGlyphRelayForIntent = useCallback((fresh = false) => {
     if (glyphRelayPreparing) return;
+    try {
+      getGlyphAppOrigin();
+      setGlyphOriginError(null);
+    } catch {
+      setGlyphOriginError(GLYPH_ORIGIN_ERROR);
+      return;
+    }
     setGlyphRelayPreparing(true);
     setActionError(null);
     void (fresh ? prepareFreshGlyphRelaySession() : prewarmGlyphRelaySession())
@@ -539,7 +548,7 @@ export function StarterApp() {
   }
 
   const connected = Boolean(wallet.account && wallet.activeConnector);
-  const availableConnectors = wallet.connectors.filter((connector) => connectorAvailable(connector) && !(connector.id === "walletconnect" && !hasWalletConnectProjectId));
+  const availableConnectors = wallet.connectors.filter((connector) => connectorAvailable(connector) && !(connector.id === "glyph-wallet" && glyphOriginError) && !(connector.id === "walletconnect" && !hasWalletConnectProjectId));
   const errorMessage = actionError || (wallet.error ? "The wallet request could not be completed. Try again." : null);
 
   return (
@@ -689,6 +698,9 @@ export function StarterApp() {
                 />
               ))}
             </div>
+            {glyphOriginError && <p className="error-line" role="status">{glyphOriginError}</p>}
+            {!hasWalletConnectProjectId && <p className="error-line">WalletConnect requires NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID.</p>}
+            {!wallet.connectors.some((connector) => connector.id === "qubic-extension" && connectorAvailable(connector)) && <p className="error-line">Install a Qubic browser extension to use the extension connector.</p>}
             {pairingUri && <div className="pairing-box"><QRCodeSVG value={pairingUri} size={168} includeMargin bgColor="transparent" fgColor="currentColor" /><p>Scan with your WalletConnect wallet.</p></div>}
             {actionError && <p className="error-line" role="alert">{actionError}</p>}
           </DialogContent>

@@ -1,7 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 
+const { canonicalDappOrigin } = await import("@glyph-oss/connect");
+
 Object.assign(globalThis, {
   window: {
+    location: { origin: "https://dapp.example" },
     dispatchEvent: (event: Event) => {
       lifecycleDetails.push((event as CustomEvent<{ requestId: string; requestType: string; state: string }>).detail);
       return true;
@@ -31,6 +34,7 @@ const result = new Promise<{ status: "connected"; type: "connect"; nonce: string
 let subscribedSession: typeof preparedSession | undefined;
 
 mock.module("@glyph-oss/connect", () => ({
+  canonicalDappOrigin,
   createConnectRequest: (request: Record<string, unknown>) => ({ ...request, nonce: "connect-nonce-1234", exp: 2_000_000_000 }),
   createScCallRequest: () => { throw new Error("not used"); },
   createEnvelope: (request: Record<string, unknown>, options: Record<string, unknown>) => ({

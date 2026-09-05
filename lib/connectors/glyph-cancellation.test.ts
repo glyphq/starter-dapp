@@ -9,8 +9,11 @@ const preparedSession = {
   registered: true,
 };
 
+const { canonicalDappOrigin } = await import("@glyph-oss/connect");
+
 Object.assign(globalThis, {
   window: {
+    location: { origin: "https://dapp.example" },
     dispatchEvent: (event: Event) => {
       lifecycle.push((event as CustomEvent<{ state: string; failureCode?: string }>).detail);
       return true;
@@ -28,6 +31,7 @@ const rejected = {
 };
 
 mock.module("@glyph-oss/connect", () => ({
+  canonicalDappOrigin,
   createConnectRequest: (request: Record<string, unknown>) => ({
     ...request,
     nonce: rejected.nonce,
