@@ -25,11 +25,11 @@ capability. Every request still requires wallet approval.
 
 ## Wallet behavior
 
-| Connector               | Behavior                                                                                                                                              |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Qubic browser extension | Uses the injected provider from `@qubic.org/react`. It is disabled when not installed.                                                                |
-| WalletConnect           | Uses QR pairing, requires `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, and sends `qubic_sign` input as `{ from, message }` for Qubic Wallet compatibility. |
-| Glyph Wallet            | Uses a Relay v2 desktop deep link and requires a public HTTPS deployment.                                                                             |
+| Connector               | Behavior                                                                                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Qubic browser extension | Uses the injected provider through a compatibility adapter that adds the current `from` identity to every transaction. It is disabled when not installed. |
+| WalletConnect           | Uses QR pairing, requires `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`, and sends `qubic_sign` input as `{ from, message }` for Qubic Wallet compatibility.     |
+| Glyph Wallet            | Uses a Relay v2 desktop deep link and requires a public HTTPS deployment.                                                                                 |
 
 A disconnected action presents only **Connect wallet**. Inputs and its submit
 control appear only once an account connects.
@@ -85,12 +85,15 @@ Source paths use kebab-case. Component symbols stay PascalCase.
 - `lib/contracts/starter-procedures.ts` is the reviewed typed boundary for
   QEarn Lock, direct-transfer validation, identity validation, and payload
   conversion.
+- `lib/connectors/qubic-extension.ts` adapts the injected provider by attaching its
+  current account identity to each extension transaction request.
 - `lib/connectors/glyph.ts` isolates the Glyph Relay v2 adapter and native
   smart-contract request path.
 
-The browser extension and WalletConnect use the shared `sendTransaction` call.
-Glyph uses `requestGlyphScCall()` for QEarn and `requestGlyphTransfer()` for
-direct transfers through its signed Relay boundary.
+The browser extension uses a local compatibility adapter that reads and attaches
+its active `from` identity to each transaction. WalletConnect uses the shared
+`sendTransaction` call. Glyph uses `requestGlyphScCall()` for QEarn and
+`requestGlyphTransfer()` for direct transfers through its signed Relay boundary.
 
 `lib/connectors/wallet-connect.ts` is a small compatibility adapter around the
 WalletConnect client. It keeps the upstream connector contract while sending a

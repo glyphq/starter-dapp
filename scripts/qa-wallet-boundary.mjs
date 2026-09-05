@@ -194,12 +194,14 @@ try {
       amount: "1000000",
       destination:
         "JAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVKHO",
+      from: identity,
       inputType: 1,
     },
     {
       amount: "42",
       destination:
         "FXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAFXHSWSJBTCZHFAYKSC",
+      from: identity,
     },
   ]);
 
@@ -290,6 +292,7 @@ try {
       rejectionKeepsChooserOpen: true,
       retryConnects: true,
       connectShowsSigningForm: true,
+      extensionRequestsIncludeActiveSender: true,
       lockAndDirectTransferRequestsUseReviewedInputs: true,
       disconnectClearsSession: true,
       accountModalCompactBalanceAndIdentityActions: true,

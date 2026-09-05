@@ -26,6 +26,8 @@ available action obvious.
   submission.
 - `lib/contracts/starter-procedures.ts`: reviewed typed builders, numeric and
   identity validation, and payload conversion.
+- `lib/connectors/qubic-extension.ts`: injects the extension's active sender into
+  each transaction request.
 - `lib/connectors/glyph.ts`: signed Glyph Relay v2 request boundary.
 
 Feature screens own their temporary fields and results. The shell does not own
@@ -58,8 +60,10 @@ a valid HTTPS page can register a Glyph Relay session in the background, but it
 never launches a wallet. A deliberate action launches the wallet when ready or
 asks for one repeat click after preparation.
 
-The browser extension and WalletConnect use their `sendTransaction` capability.
-Glyph uses its native signed `sc_call` for QEarn and `transfer` for Send QUs.
+The browser extension uses a local adapter that reads its current account and
+adds that active `from` identity to every transaction request. WalletConnect
+uses its `sendTransaction` capability. Glyph uses its native signed `sc_call`
+for QEarn and `transfer` for Send QUs.
 Requests stay bound to mainnet and account identity. Mainnet approval remains in
 the wallet.
 

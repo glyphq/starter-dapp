@@ -1,9 +1,7 @@
-import {
-  extensionConnector,
-  type WalletConnector,
-} from "@qubic.org/react";
+import type { WalletConnector } from "@qubic.org/react";
 import { glyphConnector } from "./glyph";
 import { getGlyphAppOrigin } from "./glyph-origin";
+import { qubicExtensionConnector } from "./qubic-extension";
 import { createStarterWalletConnectConnector } from "./wallet-connect";
 
 const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
@@ -11,7 +9,9 @@ const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 const walletConnectConnector = createStarterWalletConnectConnector({
   createClient: async () => {
     if (!walletConnectProjectId) {
-      throw new Error("Add NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID to enable WalletConnect.");
+      throw new Error(
+        "Add NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID to enable WalletConnect.",
+      );
     }
     const { default: SignClient } = await import("@walletconnect/sign-client");
     return SignClient.init({
@@ -28,7 +28,7 @@ const walletConnectConnector = createStarterWalletConnectConnector({
 
 export const connectors: WalletConnector[] = [
   glyphConnector,
-  extensionConnector,
+  qubicExtensionConnector,
   walletConnectConnector,
 ];
 
