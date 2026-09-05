@@ -12,8 +12,9 @@ A minimal, reusable Next.js reference for connecting Qubic wallets.
 
 This repository is a small, inspectable starting point for a Qubic dApp. It
 keeps the shared wallet wiring in `@qubic.org/react`, registers three connector
-paths, and shows how a page can connect an account, request a transfer, sign a
-message, and verify a signature.
+paths, and demonstrates three screens: **Connect**, **RandomLottery**, and
+**Sign & Verify**. A transfer helper is available in the adapter, but there
+is no standalone transfer form in the reference UI.
 
 The included Glyph Wallet adapter is one example connector, not the product
 boundary of the starter. Its Relay v2 implementation is isolated in
@@ -34,9 +35,10 @@ verification. Verification is local against the connected identity for the
 extension and WalletConnect paths; Glyph uses its native verification request.
 
 Glyph-specific actions are intentionally explicit: connect requests ask for
-`transfer`, `sc_call`, and `sign_message`, transfer and signing requests are sent through
-`@glyph-oss/connect`, and each request is bound to `qubic:mainnet`. Treat the
-transfer screen as a real wallet approval flow, not a mock transaction.
+`transfer`, `sc_call`, and `sign_message`. Requests use `@glyph-oss/connect` and
+are bound to `qubic:mainnet`. RandomLottery is a real paid contract action, not
+a mock transaction. Price and selling state are checked again before launch.
+Archive confirmation does not establish a win or refund.
 
 ## Quick start
 
@@ -54,8 +56,9 @@ bun install
 bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). With npm, use `npm ci` and
-the equivalent `npm run` commands.
+Open [http://localhost:3000](http://localhost:3000). With npm, use `npm ci`
+and `npm run dev`. The test script also requires Bun because its tests use
+`bun:test`.
 
 Copy the checked-in example when optional public configuration is needed:
 
@@ -66,9 +69,9 @@ cp .env.example .env.local
 Then update the values for your public deployment:
 
 ```dotenv
-# Set this to the canonical HTTPS origin where the built app is hosted.
-# For local-only work, omit it unless you are using an HTTPS tunnel.
-NEXT_PUBLIC_APP_ORIGIN=https://your-public-https-origin.example
+# Optional. Blank uses the current browser origin.
+# Overrides must match the public HTTPS origin serving the page.
+NEXT_PUBLIC_APP_ORIGIN=
 
 # Optional. Enables WalletConnect in the connector chooser.
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_project_id
@@ -134,6 +137,44 @@ availability explicit. Do not display an unavailable wallet as detected, and
 do not assume that a connector supports an action just because another
 connector does.
 
+### Start with one action
+
+For message signing, follow `signMessage()` in `components/StarterApp.tsx`:
+
+1. Read the connected account and connector with `useWallet()`.
+2. For Glyph, check `isGlyphRelaySessionReady()`. If it is not ready, prepare
+   the relay, show the preparation state, and return from the handler.
+3. On the next deliberate click, call `wallet.signMessage(message)` without
+   awaiting network work first. This preserves the browser gesture for Glyph.
+4. Display `signatureHex`, handle rejection, and clear the busy state in `finally`.
+
+Do not put relay preparation on hover, focus, or component mount. Do not retry
+by automatically opening the wallet after an asynchronous preparation.
+`requestGlyphTransfer()` and `requestGlyphScCall()` use the same readiness rule.
+Glyph's generic `sendTransaction()` and `signTransaction()` are intentionally
+unsupported. Use the typed helpers rather than constructing protocol messages
+in the UI.
+
+### Remove what your app does not need
+
+- **A wallet option:** remove its entry from `connectors` in
+  `lib/connectors/index.ts`. Remove its construction, imports, and configuration
+  if no longer used. The chooser only explains registered connectors.
+- **Glyph entirely:** also remove Glyph-specific readiness/status handling and
+  imports from `StarterApp.tsx`. Replace or remove RandomLottery, which requires
+  Glyph. Then delete the adapter and its tests, and remove `@glyph-oss/connect`
+  after replacing the shared origin validator used by WalletConnect.
+- **The contract example:** remove the RandomLottery screen, state, polling
+  effect, and imports from `StarterApp.tsx`, then remove `lib/contracts/`.
+  Drop the unused `sc_call` permission and update the permission fixtures.
+- **Unused permissions:** keep the requested permission list and its tests in
+  sync. The adapter intentionally checks the exact granted set.
+- **Extra UI:** add components only when a screen needs them. `components/ui/`
+  contains the seven primitives used by this reference, not a full UI kit.
+
+After adapting a flow, update its unit tests and `scripts/qa.mjs`, then run the
+checks below. Keep signed callback verification and mainnet binding intact.
+
 ## Commands
 
 | Command | Purpose |
@@ -144,6 +185,22 @@ connector does.
 | `bun run test` | Run type checking, linting, and connector protocol tests. |
 | `bun run build` | Create the static production export in `out/`. |
 | `bun run qa` | Run the responsive Playwright and axe checks. |
+
+Browser QA runs against an already-served production export:
+
+```bash
+bun run build
+python3 -m http.server 4174 --bind 127.0.0.1 -d out
+# In another terminal:
+bun run qa
+```
+
+If Chromium is missing, install it with `bunx playwright install chromium`.
+`QA_BASE_URL` overrides the default `http://127.0.0.1:4174`. QA checks desktop
+and mobile navigation, accessibility, and local-origin guidance without
+opening a wallet or submitting a paid request. Unit tests cover signed
+callback validation, rejection, retries, preparation failures, and duplicate
+launches. A real wallet approval round trip still needs separate manual testing.
 
 ## Static deployment
 
@@ -170,7 +227,9 @@ components/
 lib/connectors/
   index.ts             Registered connector set
   glyph.ts             Isolated Glyph Wallet adapter
+  glyph-origin.ts      Shared public-origin policy
   glyph-relay-adapter.ts  Relay lifecycle seam
+lib/contracts/         RandomLottery encoding, preflight, and archive status
 ```
 
 This is independent software built for Qubic. It is not an official Qubic

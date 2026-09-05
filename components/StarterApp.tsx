@@ -361,7 +361,9 @@ export function StarterApp() {
     // This is an explicit request to choose a wallet, not incidental pointer
     // activity. Preparing here gives the connector choice time to become
     // ready without creating sessions on hover or focus.
-    prepareGlyphRelayForIntent();
+    if (wallet.connectors.some((connector) => connector.id === "glyph-wallet")) {
+      prepareGlyphRelayForIntent();
+    }
   }
 
   async function connect(connectorId: string, freshRetry = false) {
@@ -699,8 +701,8 @@ export function StarterApp() {
               ))}
             </div>
             {glyphOriginError && <p className="error-line" role="status">{glyphOriginError}</p>}
-            {!hasWalletConnectProjectId && <p className="error-line">WalletConnect requires NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID.</p>}
-            {!wallet.connectors.some((connector) => connector.id === "qubic-extension" && connectorAvailable(connector)) && <p className="error-line">Install a Qubic browser extension to use the extension connector.</p>}
+            {!hasWalletConnectProjectId && wallet.connectors.some((connector) => connector.id === "walletconnect") && <p className="error-line">WalletConnect requires NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID.</p>}
+            {wallet.connectors.some((connector) => connector.id === "qubic-extension" && !connectorAvailable(connector)) && <p className="error-line">Install a Qubic browser extension to use the extension connector.</p>}
             {pairingUri && <div className="pairing-box"><QRCodeSVG value={pairingUri} size={168} includeMargin bgColor="transparent" fgColor="currentColor" /><p>Scan with your WalletConnect wallet.</p></div>}
             {actionError && <p className="error-line" role="alert">{actionError}</p>}
           </DialogContent>
